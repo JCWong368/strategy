@@ -1,0 +1,7 @@
+# 临时/本地文件
+_*.png
+_*.html
+_*.js
+__pycache__/
+.DS_Store
+Thumbs.db

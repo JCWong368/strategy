@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>宏观配置4.0.7 策略展示</title>
+<script src="echarts.min.js"></script>
+<script src="data.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f4f6fa; color: #2b3445; padding: 16px; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .sub { color: #8492a6; font-size: 12px; margin-bottom: 14px; }
+  .cards { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+  .card { background: #fff; border-radius: 8px; padding: 10px 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); min-width: 110px; }
+  .card .k { font-size: 12px; color: #8492a6; }
+  .card .v { font-size: 18px; font-weight: 600; margin-top: 2px; }
+  .panel { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 14px; margin-bottom: 14px; }
+  .panel h2 { font-size: 15px; margin-bottom: 10px; color: #33415c; }
+  .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .toolbar button { padding: 4px 12px; border: 1px solid #d0d7e2; background: #fff; border-radius: 5px; cursor: pointer; font-size: 13px; }
+  .toolbar button:hover { background: #eef2f8; }
+  .toolbar input[type=date] { padding: 4px 8px; border: 1px solid #d0d7e2; border-radius: 5px; font-size: 13px; }
+  .toolbar label { font-size: 13px; color: #5a6a85; user-select: none; cursor: pointer; }
+  #chart_nav { width: 100%; height: 460px; }
+  #chart_w { width: 100%; height: 280px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 1100px) { .grid2 { grid-template-columns: 1fr; } }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { border-bottom: 1px solid #edf0f5; padding: 6px 8px; text-align: right; }
+  th { color: #8492a6; font-weight: 500; background: #fafbfc; }
+  td.l, th.l { text-align: left; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; background: #eef2f8; margin-right: 4px; }
+  .state-big { font-size: 26px; font-weight: 700; }
+  .kv { font-size: 13px; line-height: 1.9; }
+  .kv b { color: #5a6a85; font-weight: 500; margin-right: 6px; }
+  .pos { color: #d63031; } .neg { color: #00b26a; }
+  .none-tip { color: #a0aab8; font-size: 13px; padding: 8px 0; }
+  .wbar { display: flex; height: 18px; border-radius: 4px; overflow: hidden; margin: 6px 0 10px; }
+  .wbar div { height: 100%; }
+  .wlegend { font-size: 12px; color: #5a6a85; display: flex; flex-wrap: wrap; gap: 10px; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+</style>
+</head>
+<body>
+
+<h1>宏观配置4.0.7 <span style="font-size:13px;color:#8492a6;font-weight:400">open_open · A股7.2.7 · 4to2 · HK15 · T日收盘减仓</span></h1>
+<div class="sub" id="range"></div>
+
+<div class="cards" id="metrics"></div>
+
+<div class="panel">
+  <h2>净值 / 回撤（滚轮缩放，点击曲线可切换下方日期）</h2>
+  <div class="toolbar">
+    <label><input type="checkbox" id="logscale"> 对数坐标</label>
+    <label><input type="checkbox" id="showred"> 标注减仓事件</label>
+  </div>
+  <div id="chart_nav"></div>
+</div>
+
+<div class="panel">
+  <h2>模块权重（堆叠）</h2>
+  <div id="chart_w"></div>
+</div>
+
+<div class="panel">
+  <h2>指定日期详情</h2>
+  <div class="toolbar">
+    <button id="prev">← 前一交易日</button>
+    <input type="date" id="datepick">
+    <button id="next">后一交易日 →</button>
+    <span class="sub" id="curtip" style="margin:0"></span>
+  </div>
+  <div class="grid2">
+    <div>
+      <h2>信号</h2>
+      <div id="signal"></div>
+    </div>
+    <div>
+      <h2>当日持仓</h2>
+      <div id="holdings"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const D = window.STRATEGY_DATA;
+const MODULE_DEF = [
+  ["w_a_stock","A股","#5470c6"], ["w_hk","港股","#91cc75"], ["w_commodity","商品","#fac858"],
+  ["w_global","全球","#ee6666"], ["w_alt_501025","备选501025","#73c0de"], ["w_cash","现金","#c0c8d4"],
+];
+const dates = D.nav.map(r => r[0]);
+const wMap = {}; D.weights.forEach(r => wMap[r[0]] = r);
+const redMap = {}; D.reductions.forEach(r => redMap[r[0]] = r);
+const pct = (x, d=1) => (x*100).toFixed(d) + "%";
+const fmtWan = x => x >= 1e8 ? (x/1e8).toFixed(2)+"亿" : (x/1e4).toFixed(1)+"万";
+
+// ---------- 指标卡 ----------
+(function(){
+  const m = D.metrics;
+  document.getElementById("range").textContent =
+    `回测区间 ${m.start} ~ ${m.end}（${m.days} 个交易日）｜数据生成于 ${new Date().toLocaleString("zh-CN")}`;
+  const items = [
+    ["累计收益", pct(m.total_return), m.total_return>=0?"pos":"neg"],
+    ["年化收益", pct(m.annual_return), m.annual_return>=0?"pos":"neg"],
+    ["最大回撤", pct(m.max_drawdown), "neg"],
+    ["夏普比率", m.sharpe, ""],
+    ["卡玛比率", m.calmar ?? "-", ""],
+    ["年化波动", pct(m.annual_vol), ""],
+    ["日胜率", pct(m.win_rate), ""],
+    ["累计交易成本", fmtWan(m.total_cost), ""],
+  ];
+  document.getElementById("metrics").innerHTML = items.map(([k,v,c]) =>
+    `<div class="card"><div class="k">${k}</div><div class="v ${c}">${v}</div></div>`).join("");
+})();
+
+// ---------- 净值 + 回撤图 ----------
+const navChart = echarts.init(document.getElementById("chart_nav"));
+function navOption(){
+  const log = document.getElementById("logscale").checked;
+  const showRed = document.getElementById("showred").checked;
+  return {
+    animation: false,
+    tooltip: { trigger: "axis", axisPointer: { type: "cross" },
+      formatter: ps => {
+        const d = ps[0].axisValue;
+        let s = d;
+        ps.forEach(p => {
+          const v = p.seriesName === "回撤" ? pct(p.value[1], 2) : (+p.value[1]).toFixed(4);
+          s += `<br>${p.marker}${p.seriesName}: <b>${v}</b>`;
+        });
+        return s;
+      }},
+    axisPointer: { link: [{ xAxisIndex: "all" }] },
+    grid: [
+      { left: 60, right: 20, top: 30, height: "56%" },
+      { left: 60, right: 20, top: "70%", height: "14%" },
+    ],
+    xAxis: [
+      { type: "time", gridIndex: 0 },
+      { type: "time", gridIndex: 1, show: false },
+    ],
+    yAxis: [
+      { type: log ? "log" : "value", scale: true, gridIndex: 0, name: "净值" },
+      { type: "value", gridIndex: 1, max: 0, axisLabel: { formatter: v => (v*100).toFixed(0)+"%" } },
+    ],
+    dataZoom: [
+      { type: "inside", xAxisIndex: [0,1] },
+      { type: "slider", xAxisIndex: [0,1], bottom: 6, height: 22 },
+    ],
+    series: [
+      { name: "净值", type: "line", xAxisIndex: 0, yAxisIndex: 0, showSymbol: false,
+        data: D.nav.map(r => [r[0], r[1]]), lineStyle: { width: 1.6 }, color: "#5470c6",
+        markLine: showRed ? {
+          symbol: "none", label: { show: false },
+          lineStyle: { color: "#ee6666", width: 1, type: "dashed", opacity: .5 },
+          data: D.reductions.map(r => ({ xAxis: r[0] })),
+        } : undefined },
+      { name: "回撤", type: "line", xAxisIndex: 1, yAxisIndex: 1, showSymbol: false,
+        data: D.nav.map(r => [r[0], r[3]]), areaStyle: { opacity: .35 },
+        lineStyle: { width: 1 }, color: "#ee6666" },
+    ],
+  };
+}
+navChart.setOption(navOption());
+document.getElementById("logscale").onchange = () => navChart.setOption(navOption(), true);
+document.getElementById("showred").onchange = () => navChart.setOption(navOption(), true);
+navChart.on("click", p => { if (p.value && p.value[0]) setDate(p.value[0]); });
+
+// ---------- 模块权重堆叠图 ----------
+const wChart = echarts.init(document.getElementById("chart_w"));
+wChart.setOption({
+  animation: false,
+  tooltip: { trigger: "axis", valueFormatter: v => (v*100).toFixed(1)+"%" },
+  legend: { top: 0 },
+  grid: { left: 50, right: 20, top: 30, bottom: 40 },
+  xAxis: { type: "time" },
+  yAxis: { type: "value", max: v => Math.min(1, Math.ceil(v.max*10)/10), axisLabel: { formatter: v => (v*100).toFixed(0)+"%" } },
+  dataZoom: [ { type: "inside" }, { type: "slider", bottom: 6, height: 20 } ],
+  series: MODULE_DEF.map(([key, name, color], i) => ({
+    name, type: "line", stack: "w", showSymbol: false, color,
+    areaStyle: { opacity: .8 }, lineStyle: { width: .5 },
+    emphasis: { focus: "series" },
+    data: D.weights.map(r => [r[0], r[i+1]]),
+  })),
+});
+
+// ---------- 日期详情 ----------
+let curIdx = dates.length - 1;
+const pick = document.getElementById("datepick");
+
+function nearestIdx(dstr){
+  let lo = 0, hi = dates.length - 1, ans = hi;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (dates[mid] <= dstr) { ans = mid; lo = mid + 1; } else hi = mid - 1;
+  }
+  return ans;
+}
+function setDate(dstr){ curIdx = nearestIdx(dstr); renderDetail(); }
+document.getElementById("prev").onclick = () => { if (curIdx > 0) { curIdx--; renderDetail(); } };
+document.getElementById("next").onclick = () => { if (curIdx < dates.length - 1) { curIdx++; renderDetail(); } };
+pick.onchange = () => setDate(pick.value);
+
+function weightBar(w){
+  const parts = MODULE_DEF.map(([key, name, color], i) => ({ name, color, v: w[i+1] || 0 }));
+  const total = parts.reduce((s, p) => s + p.v, 0) || 1;
+  const bar = parts.filter(p => p.v > 0.0005).map(p =>
+    `<div style="width:${(p.v/total*100).toFixed(2)}%;background:${p.color}" title="${p.name} ${pct(p.v)}"></div>`).join("");
+  const legend = parts.map(p =>
+    `<span><span class="dot" style="background:${p.color}"></span>${p.name} ${pct(p.v)}</span>`).join("");
+  return `<div class="wbar">${bar}</div><div class="wlegend">${legend}</div>`;
+}
+
+function renderDetail(){
+  const d = dates[curIdx];
+  pick.value = d;
+  document.getElementById("curtip").textContent = `第 ${curIdx+1}/${dates.length} 个交易日`;
+  const navRow = D.nav[curIdx];
+  const w = wMap[d] || [];
+  const ms = D.market_state[d];
+  const sig = D.signals[d];
+  const red = redMap[d];
+
+  // ---- 信号区 ----
+  let h = "";
+  h += `<div class="kv"><b>净值</b>${navRow[1].toFixed(4)}　<b>日收益</b><span class="${navRow[2]>=0?'pos':'neg'}">${pct(navRow[2],2)}</span>　<b>回撤</b>${pct(navRow[3],2)}</div>`;
+  if (ms) {
+    h += `<div class="kv"><b>大盘状态</b><span class="state-big">${ms[0]}</span>
+      <span class="tag">N20 ${ms[1]}</span><span class="tag">N5 ${ms[2]}</span>
+      <span class="tag">A股目标仓位 ${pct(ms[3],0)}</span></div>`;
+  }
+  h += `<div class="kv" style="margin-top:6px"><b>模块权重</b></div>` + weightBar(w);
+  if (red) {
+    h += `<div class="kv"><b>T日收盘减仓</b><span class="tag">减仓比例 ${pct(red[1])}</span>
+      <span class="tag">卖出 ${fmtWan(red[2])}</span>
+      ${red[3] > 0 ? `<span class="tag">受限未卖 ${fmtWan(red[3])}</span>` : ""}</div>`;
+  }
+  if (sig) {
+    h += `<hr style="border:none;border-top:1px dashed #dfe5ee;margin:8px 0">`;
+    h += `<div class="kv"><b>完整信号（precompute）</b></div>`;
+    if (sig.a_stock_rs_top5) h += `<div class="kv"><b>A股 RS Top5</b>${sig.a_stock_rs_top5.map(c => `<span class="tag">${c} ${D.names[c]||""}</span>`).join("")}</div>`;
+    if (sig.hk_rs_top2) h += `<div class="kv"><b>港股 RS Top2</b>${sig.hk_rs_top2.map(c => `<span class="tag">${c} ${D.names[c]||""}</span>`).join("")}</div>`;
+    h += `<div class="kv"><b>系数</b><span class="tag">商品 ${sig.commodity_avg_coef ?? "-"}</span><span class="tag">全球 ${sig.global_avg_coef ?? "-"}</span></div>`;
+    if (sig.weights_t1) {
+      h += `<div class="kv"><b>T+1 目标权重</b></div>` + weightBar(["d", ...MODULE_DEF.map(k => sig.weights_t1[k[0]] ?? 0)]);
+    }
+    const tx = sig.a_stock_transactions || { sell: [], buy: [] };
+    if (tx.sell.length || tx.buy.length) {
+      h += `<div class="kv"><b>A股交易</b><span class="tag neg">卖出 ${tx.sell.length} 笔</span><span class="tag pos">买入 ${tx.buy.length} 笔</span></div>`;
+      const rows = [...tx.sell, ...tx.buy].map(t =>
+        `<tr><td class="l">${t.code}</td><td class="l">${D.names[t.code]||""}</td>
+         <td>${t.action||""}</td><td>${(t.quantity||0).toLocaleString()}</td>
+         <td>${t.estimated_amount ? fmtWan(t.estimated_amount) : "-"}</td></tr>`).join("");
+      h += `<table><tr><th class="l">代码</th><th class="l">名称</th><th>方向</th><th>数量</th><th>金额</th></tr>${rows}</table>`;
+    }
+  } else {
+    h += `<div class="none-tip">该日期无 precompute 完整信号（仅 2026-07-03 起逐日落盘）；上方为可重建信号。</div>`;
+  }
+  document.getElementById("signal").innerHTML = h;
+
+  // ---- 持仓区 ----
+  const pos = D.positions[d] || [];
+  if (!pos.length) {
+    document.getElementById("holdings").innerHTML = `<div class="none-tip">当日无持仓（空仓）。</div>`;
+  } else {
+    const rows = pos.map(([c, q], i) =>
+      `<tr><td>${i+1}</td><td class="l">${c}</td><td class="l">${D.names[c]||""}</td><td>${q.toLocaleString()}</td></tr>`).join("");
+    document.getElementById("holdings").innerHTML =
+      `<div class="kv" style="margin-bottom:6px"><b>共 ${pos.length} 只</b></div>
+       <table><tr><th>#</th><th class="l">代码</th><th class="l">名称</th><th>数量(股)</th></tr>${rows}</table>`;
+  }
+}
+renderDetail();
+
+window.addEventListener("resize", () => { navChart.resize(); wChart.resize(); });
+</script>
+</body>
+</html>
