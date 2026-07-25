@@ -17,11 +17,9 @@
               font-size: 13px; color: #999; }
   .art-meta .tag { background: #eef3fb; color: #4a7fd6; border-radius: 4px; padding: 1px 8px; font-size: 12px; }
   .art-divider { border: none; border-top: 1px solid #eee; margin: 16px 0; }
-  /* 段落标题：左侧竖条 */
   h2, details summary { font-size: 17px; font-weight: 600; padding-left: 10px;
        border-left: 4px solid #4a7fd6; line-height: 1.2; }
   h2 { margin: 8px 0 12px; }
-  /* 折叠块 */
   details { margin: 20px 0; }
   details summary { cursor: pointer; list-style: none; display: flex; align-items: center;
        justify-content: space-between; padding: 10px 0 10px 10px; user-select: none; }
@@ -29,31 +27,30 @@
   details summary .arrow { font-size: 12px; color: #b8bfcc; transition: transform .15s; margin-right: 4px; }
   details[open] summary .arrow { transform: rotate(90deg); }
   details .body { padding-top: 4px; }
-  /* 大盘状态 */
   .state-row { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; }
   .state-big { font-size: 34px; font-weight: 800; color: #2b3445; }
   .state-sub { font-size: 13px; color: #888; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
   .chip { background: #f2f4f8; border-radius: 12px; padding: 3px 10px; font-size: 12px; color: #55617a; }
   .chip.hl { background: #eaf1fc; color: #3d6fc4; }
-  /* 权重条 */
   .wbar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; margin: 10px 0 8px; }
   .wbar div { height: 100%; }
   .wlegend { font-size: 11px; color: #77839a; display: flex; flex-wrap: wrap; gap: 8px; }
   .dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 3px; }
   .lbl { font-size: 13px; color: #77839a; margin-top: 12px; }
-  /* T/T+1 切换 */
   .tabs { display: flex; gap: 8px; margin: 10px 0 12px; }
   .tabs button { flex: 1; border: 1px solid #dde3ec; background: #fff; border-radius: 18px;
                  padding: 6px 0; font-size: 13px; color: #4a5568; }
   .tabs button.on { background: #4a7fd6; border-color: #4a7fd6; color: #fff; }
-  /* 指标卡 */
   .mgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .mgrid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 10px; }
   .mcard { background: #f8f9fb; border-radius: 10px; padding: 12px 14px; }
   .mcard .k { font-size: 12px; color: #98a1b3; }
   .mcard .v { font-size: 19px; font-weight: 700; margin-top: 2px; }
+  .mgrid3 .mcard { padding: 10px 10px; }
+  .mgrid3 .v { font-size: 16px; }
+  .mcard .ex { font-size: 11px; color: #98a1b3; margin-top: 2px; }
   .pos { color: #d63031; } .neg { color: #00a661; }
-  /* 持仓列表 */
   .hrow { display: flex; align-items: center; padding: 10px 2px; border-bottom: 1px solid #f0f0f0; }
   .hrow .no { width: 22px; color: #b8bfcc; font-size: 12px; }
   .hrow .nm { flex: 1; min-width: 0; }
@@ -61,15 +58,11 @@
   .hrow .nm .n { font-size: 14px; }
   .hrow .q { font-size: 13px; color: #55617a; white-space: nowrap; text-align: right; }
   .hrow .q .sub { display: block; font-size: 11px; color: #b0b7c3; }
-  /* 交易列表 */
   .tx { font-size: 13px; line-height: 1.9; }
   .tx .buy { color: #d63031; } .tx .sell { color: #00a661; }
-  /* 图表 */
   #chart { width: 100%; height: 300px; margin-top: 8px; }
   .chart-bar { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
   .chart-bar label { font-size: 12px; color: #77839a; user-select: none; }
-  .chart-tip { font-size: 11px; color: #b8bfcc; text-align: center; margin-top: 2px; }
-  /* 翻页 */
   .daynav { display: grid; grid-template-columns: auto 1fr auto; align-items: center; margin: 6px 0 2px; }
   .daynav button { border: 1px solid #dde3ec; background: #fff; border-radius: 16px;
                    padding: 5px 14px; font-size: 13px; color: #4a5568; white-space: nowrap; }
@@ -94,7 +87,8 @@
 
   <!-- 常驻：净值与指标 -->
   <h2>净值表现</h2>
-  <div class="mgrid" id="sec-metrics"></div>
+  <div class="mgrid3" id="sec-period"></div>
+  <div class="mgrid" id="sec-metrics" style="margin-top:10px"></div>
   <div class="chart-bar">
     <label><input type="checkbox" id="logscale"> ln 对数坐标</label>
     <label style="color:#b8bfcc">双指缩放 / 拖动</label>
@@ -138,10 +132,13 @@ const MODULE_DEF = [
   ["w_global","全球","#ee6666"], ["w_alt_501025","备选501025","#73c0de"], ["w_cash","现金","#c0c8d4"],
 ];
 const dates = D.nav.map(r => r[0]);
+const bm = D.benchmarks["等权基准"];
 const wMap = {}; D.weights.forEach(r => wMap[r[0]] = r);
 const redMap = {}; D.reductions.forEach(r => redMap[r[0]] = r);
 const pct = (x, d=1) => x == null ? "-" : (x*100).toFixed(d) + "%";
+const spct = (x, d=1) => x == null ? "-" : (x >= 0 ? "+" : "") + (x*100).toFixed(d) + "%";
 const fmtWan = x => x >= 1e8 ? (x/1e8).toFixed(2)+"亿" : (x/1e4).toFixed(1)+"万";
+const mmdd = d => d ? d.slice(5) : "";
 
 let curIdx = dates.length - 1;
 let sigTab = "t1", holdTab = "t1";
@@ -161,7 +158,7 @@ function weightBar(arr){
     `<span><span class="dot" style="background:${p.color}"></span>${p.name} ${pct(p.v)}</span>`).join("") + `</div>`;
 }
 
-// ---------- 常驻：指标 + 净值图 ----------
+// ---------- 常驻：总体指标 ----------
 (function(){
   const m = D.metrics;
   const items = [
@@ -175,6 +172,31 @@ function weightBar(arr){
   document.getElementById("m-gen").textContent = `回测区间 ${m.start} ~ ${m.end}`;
 })();
 
+// ---------- 区间指标（跟随所选日期）----------
+function periodRet(series, i, prefixLen){
+  let j = i;
+  const prefix = dates[i].slice(0, prefixLen);
+  while (j > 0 && dates[j-1].startsWith(prefix)) j--;
+  const base = j > 0 ? series[j-1] : 1.0;
+  return series[i] / base - 1;
+}
+function renderPeriod(){
+  const i = curIdx;
+  const navs = D.nav.map(r => r[1]);
+  const defs = [
+    ["当日", navs[i] / (i > 0 ? navs[i-1] : 1.0) - 1, bm[i] / (i > 0 ? bm[i-1] : 1.0) - 1],
+    ["当月", periodRet(navs, i, 7), periodRet(bm, i, 7)],
+    ["今年", periodRet(navs, i, 4), periodRet(bm, i, 4)],
+  ];
+  document.getElementById("sec-period").innerHTML = defs.map(([k, s, b]) => {
+    const ex = s - b;
+    return `<div class="mcard"><div class="k">${k}收益</div>
+      <div class="v ${s>=0?'pos':'neg'}">${spct(s,2)}</div>
+      <div class="ex">超额 <span class="${ex>=0?'pos':'neg'}">${spct(ex,2)}</span></div></div>`;
+  }).join("");
+}
+
+// ---------- 净值图 ----------
 const chart = echarts.init(document.getElementById("chart"));
 function chartOption(){
   const log = document.getElementById("logscale").checked;
@@ -198,12 +220,9 @@ function chartOption(){
     series: [
       { name: "策略", type: "line", xAxisIndex: 0, yAxisIndex: 0, showSymbol: false,
         data: D.nav.map(r=>[r[0],r[1]]), lineStyle: { width: 1.8 }, color: "#4a7fd6", z: 3 },
-      { name: "沪深300", type: "line", xAxisIndex: 0, yAxisIndex: 0, showSymbol: false,
-        data: D.nav.map((r,i)=>[r[0], D.benchmarks["沪深300"][i]]),
+      { name: "等权基准", type: "line", xAxisIndex: 0, yAxisIndex: 0, showSymbol: false,
+        data: D.nav.map((r,i)=>[r[0], bm[i]]),
         lineStyle: { width: 1, opacity: .8 }, color: "#c0a060" },
-      { name: "中证500", type: "line", xAxisIndex: 0, yAxisIndex: 0, showSymbol: false,
-        data: D.nav.map((r,i)=>[r[0], D.benchmarks["中证500"][i]]),
-        lineStyle: { width: 1, opacity: .8 }, color: "#a0a8b8" },
       { name: "回撤", type: "line", xAxisIndex: 1, yAxisIndex: 1, showSymbol: false,
         data: D.nav.map(r=>[r[0],r[3]]), areaStyle: { opacity: .3 },
         lineStyle: { width: .8 }, color: "#ee6666" },
@@ -229,8 +248,12 @@ function renderSignal(){
   const ms = D.market_state[d];
   const sig = D.signals[d];
   const red = redMap[d];
-  document.getElementById("sig-t").className = sigTab === "t" ? "on" : "";
-  document.getElementById("sig-t1").className = sigTab === "t1" ? "on" : "";
+  const t1d = dates[curIdx+1] || (sig && sig.t1_date) || null;
+  const btnT = document.getElementById("sig-t"), btnT1 = document.getElementById("sig-t1");
+  btnT.textContent = `T日 ${mmdd(d)} · 已执行`;
+  btnT1.textContent = `T+1日 ${mmdd(t1d)} · 待执行`;
+  btnT.className = sigTab === "t" ? "on" : "";
+  btnT1.className = sigTab === "t1" ? "on" : "";
 
   let h = "";
   if (sigTab === "t") {
@@ -276,8 +299,12 @@ function holdRows(list, wIdx){
 function renderHold(){
   const d = dates[curIdx];
   const sig = D.signals[d];
-  document.getElementById("hold-t").className = holdTab === "t" ? "on" : "";
-  document.getElementById("hold-t1").className = holdTab === "t1" ? "on" : "";
+  const t1d = dates[curIdx+1] || (sig && sig.t1_date) || null;
+  const btnT = document.getElementById("hold-t"), btnT1 = document.getElementById("hold-t1");
+  btnT.textContent = `T日 ${mmdd(d)} · 实际`;
+  btnT1.textContent = `T+1日 ${mmdd(t1d)} · 目标`;
+  btnT.className = holdTab === "t" ? "on" : "";
+  btnT1.className = holdTab === "t1" ? "on" : "";
   let h;
   if (holdTab === "t") {
     h = holdRows(D.positions[d] || [], 2);
@@ -296,6 +323,7 @@ function render(){
   document.getElementById("m-date").textContent = d;
   document.getElementById("m-state").textContent = ms ? "大盘 " + ms[0] : "";
   document.getElementById("m-idx").textContent = `${curIdx+1}/${dates.length}`;
+  renderPeriod();
   renderSignal();
   renderHold();
 }

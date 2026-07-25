@@ -75,7 +75,7 @@ def main():
         "total_cost": round(nav["transaction_cost"].sum(), 0),
     }
 
-    # ---- 基准指数（沪深300 / 中证500，起点归一化为1）----
+    # ---- 基准指数（沪深300 + 中证500 等权，起点归一化为1）----
     benchmarks = {}
     idx_path = ROOT / "03_运行类" / "指数_prices_long.csv"
     if idx_path.exists():
@@ -83,13 +83,14 @@ def main():
                           usecols=["code", "date", "close"], encoding="utf-8-sig")
         idx["code"] = idx["code"].str.strip()
         nav_dates = nav["date"].tolist()
-        for code, label in [("000300", "沪深300"), ("000905", "中证500")]:
+        legs = []
+        for code in ["000300", "000905"]:
             s = (idx[idx["code"] == code].drop_duplicates("date")
                  .set_index("date")["close"].sort_index())
             s = s.reindex(sorted(set(s.index) | set(nav_dates))).ffill().reindex(nav_dates)
-            base = s.dropna().iloc[0] if s.notna().any() else None
-            if base:
-                benchmarks[label] = [round(v / base, 6) if pd.notna(v) else None for v in s]
+            legs.append(s / s.dropna().iloc[0])
+        ew = sum(legs) / len(legs)
+        benchmarks["等权基准"] = [round(v, 6) if pd.notna(v) else None for v in ew]
 
     # ---- 每日持仓（含市值占比）----
     pos = pd.read_csv(BASE / "results" / "positions_history.csv",
@@ -144,6 +145,7 @@ def main():
         a = j.get("a_stock", {})
         entry = {
             "market_state": sig.get("market_state"),
+            "t1_date": j.get("meta", {}).get("t1_date"),
             "weights_t": sig.get("weights_t"),
             "weights_t1": sig.get("weights_t1"),
             "a_stock_target_ratio": sig.get("a_stock_target_ratio"),
