@@ -11,10 +11,10 @@
   body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f4f6fa; color: #2b3445; padding: 16px; }
   h1 { font-size: 20px; margin-bottom: 4px; }
   .sub { color: #8492a6; font-size: 12px; margin-bottom: 14px; }
-  .cards { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
-  .card { background: #fff; border-radius: 8px; padding: 10px 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); min-width: 110px; }
-  .card .k { font-size: 12px; color: #8492a6; }
-  .card .v { font-size: 18px; font-weight: 600; margin-top: 2px; }
+  .cards { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+  .card { background: #fff; border-radius: 10px; padding: 16px 26px; box-shadow: 0 1px 3px rgba(0,0,0,.08); min-width: 170px; }
+  .card .k { font-size: 14px; color: #8492a6; }
+  .card .v { font-size: 28px; font-weight: 700; margin-top: 4px; }
   .panel { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 14px; margin-bottom: 14px; }
   .panel h2 { font-size: 15px; margin-bottom: 10px; color: #33415c; }
   .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
@@ -24,6 +24,7 @@
   .toolbar label { font-size: 13px; color: #5a6a85; user-select: none; cursor: pointer; }
   #chart_nav { width: 100%; height: 460px; }
   #chart_w { width: 100%; height: 280px; }
+  #chart_hp { width: 100%; height: 300px; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   @media (max-width: 1100px) { .grid2 { grid-template-columns: 1fr; } }
   table { border-collapse: collapse; width: 100%; font-size: 13px; }
@@ -60,6 +61,12 @@
 </div>
 
 <div class="panel">
+  <h2>持有期收益分布（任意交易日买入并持有 6 / 12 个月）</h2>
+  <div id="hp_stats"></div>
+  <div id="chart_hp"></div>
+</div>
+
+<div class="panel">
   <h2>模块权重（堆叠）</h2>
   <div id="chart_w"></div>
 </div>
@@ -78,7 +85,7 @@
       <div id="signal"></div>
     </div>
     <div>
-      <h2>当日持仓</h2>
+      <h2>持仓（T / T+1，占总资产比例）</h2>
       <div id="holdings"></div>
     </div>
   </div>
@@ -167,6 +174,51 @@ navChart.setOption(navOption());
 document.getElementById("logscale").onchange = () => navChart.setOption(navOption(), true);
 document.getElementById("showred").onchange = () => navChart.setOption(navOption(), true);
 navChart.on("click", p => { if (p.value && p.value[0]) setDate(p.value[0]); });
+
+// ---------- 持有期收益分布 ----------
+(function(){
+  const navs = D.nav.map(r => r[1]);
+  const defs = [["6个月", 126, "#5470c6"], ["12个月", 252, "#91cc75"]];
+  const groups = defs.map(([label, days, color]) => {
+    const rets = [];
+    for (let i = days; i < navs.length; i++) rets.push(navs[i] / navs[i-days] - 1);
+    return { label, color, rets };
+  });
+  const stat = a => {
+    const s = [...a].sort((x, y) => x - y);
+    const med = s.length % 2 ? s[(s.length-1)/2] : (s[s.length/2-1] + s[s.length/2]) / 2;
+    return { n: a.length, mean: a.reduce((x, y) => x + y, 0) / a.length, med,
+             min: s[0], max: s[s.length-1], win: a.filter(x => x > 0).length / a.length };
+  };
+  let st = `<table><tr><th class="l">持有期</th><th>样本数</th><th>均值</th><th>中位数</th><th>最好</th><th>最差</th><th>正收益占比</th></tr>`;
+  groups.forEach(({ label, rets }) => {
+    const t = stat(rets);
+    st += `<tr><td class="l">${label}</td><td>${t.n}</td><td>${pct(t.mean)}</td><td>${pct(t.med)}</td>
+      <td class="pos">${pct(t.max)}</td><td class="neg">${pct(t.min)}</td><td>${pct(t.win)}</td></tr>`;
+  });
+  document.getElementById("hp_stats").innerHTML = st + `</table>`;
+
+  const all = groups.flatMap(g => g.rets);
+  const lo = Math.floor(Math.min(...all) / 0.05) * 0.05;
+  const hi = Math.ceil(Math.max(...all) / 0.05) * 0.05;
+  const bins = [];
+  for (let b = lo; b < hi - 1e-9; b += 0.05) bins.push([b, b + 0.05]);
+  const binLabels = bins.map(([a]) => (a * 100).toFixed(0) + "%");
+  const hpChart = echarts.init(document.getElementById("chart_hp"));
+  hpChart.setOption({
+    animation: false,
+    tooltip: { trigger: "axis" },
+    legend: { top: 0 },
+    grid: { left: 50, right: 20, top: 30, bottom: 30 },
+    xAxis: { type: "category", data: binLabels, name: "持有期收益" },
+    yAxis: { type: "value", name: "次数" },
+    series: groups.map(({ label, color, rets }) => ({
+      name: label, type: "bar", color, barGap: "10%",
+      data: bins.map(([a, b]) => rets.filter(r => r >= a && r < b).length),
+    })),
+  });
+  window.addEventListener("resize", () => hpChart.resize());
+})();
 
 // ---------- 模块权重堆叠图 ----------
 const wChart = echarts.init(document.getElementById("chart_w"));
@@ -260,17 +312,20 @@ function renderDetail(){
   }
   document.getElementById("signal").innerHTML = h;
 
-  // ---- 持仓区 ----
-  const pos = D.positions[d] || [];
-  if (!pos.length) {
-    document.getElementById("holdings").innerHTML = `<div class="none-tip">当日无持仓（空仓）。</div>`;
-  } else {
-    const rows = pos.map(([c, q], i) =>
-      `<tr><td>${i+1}</td><td class="l">${c}</td><td class="l">${D.names[c]||""}</td><td>${q.toLocaleString()}</td></tr>`).join("");
-    document.getElementById("holdings").innerHTML =
-      `<div class="kv" style="margin-bottom:6px"><b>共 ${pos.length} 只</b></div>
-       <table><tr><th>#</th><th class="l">代码</th><th class="l">名称</th><th>数量(股)</th></tr>${rows}</table>`;
-  }
+  // ---- 持仓区（只显示占总资产比例）----
+  const holdTable = (list, title) => {
+    if (!list || !list.length) return `<div class="none-tip">${title}：无数据（空仓或该日期未落盘）。</div>`;
+    const sum = list.reduce((s, x) => s + (x[2] || 0), 0);
+    const rows = list.map(([c, , p], i) =>
+      `<tr><td>${i+1}</td><td class="l">${c}</td><td class="l">${D.names[c]||""}</td><td>${p == null ? "-" : pct(p)}</td></tr>`).join("");
+    return `<div class="kv" style="margin:8px 0 4px"><b>${title}</b>（${list.length} 只，合计 ${pct(sum)}）</div>
+      <table><tr><th>#</th><th class="l">代码</th><th class="l">名称</th><th>占总资产</th></tr>${rows}</table>`;
+  };
+  document.getElementById("holdings").innerHTML =
+    holdTable(D.positions[d] || [], "T日实际持仓") +
+    (sig && sig.t1_holdings
+      ? holdTable(sig.t1_holdings, "T+1目标持仓")
+      : `<div class="none-tip">T+1目标持仓：该日期无数据（2026-07-03 起逐日落盘）。</div>`);
 }
 renderDetail();
 
