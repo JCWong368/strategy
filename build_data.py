@@ -75,13 +75,47 @@ def main():
         "total_cost": round(nav["transaction_cost"].sum(), 0),
     }
 
-    # ---- 每日持仓 ----
+    # ---- 基准指数（沪深300 / 中证500，起点归一化为1）----
+    benchmarks = {}
+    idx_path = ROOT / "03_运行类" / "指数_prices_long.csv"
+    if idx_path.exists():
+        idx = pd.read_csv(idx_path, dtype={"code": str},
+                          usecols=["code", "date", "close"], encoding="utf-8-sig")
+        idx["code"] = idx["code"].str.strip()
+        nav_dates = nav["date"].tolist()
+        for code, label in [("000300", "沪深300"), ("000905", "中证500")]:
+            s = (idx[idx["code"] == code].drop_duplicates("date")
+                 .set_index("date")["close"].sort_index())
+            s = s.reindex(sorted(set(s.index) | set(nav_dates))).ffill().reindex(nav_dates)
+            base = s.dropna().iloc[0] if s.notna().any() else None
+            if base:
+                benchmarks[label] = [round(v / base, 6) if pd.notna(v) else None for v in s]
+
+    # ---- 每日持仓（含市值占比）----
     pos = pd.read_csv(BASE / "results" / "positions_history.csv",
                       dtype={"code": str}, encoding="utf-8-sig")
     pos["code"] = pos["code"].str.strip().str.zfill(6)
+    pos["date"] = pos["date"].astype(str)
+    # 价格查找表：持仓涉及的代码 × 策略交易日，前值填充
+    px = pd.read_csv(ROOT / "03_运行类" / "etf_prices_long.csv", dtype={"code": str},
+                     usecols=["code", "date", "close"], encoding="utf-8-sig")
+    px["code"] = px["code"].str.strip().str.zfill(6)
+    px["date"] = px["date"].astype(str)
+    px = px[px["code"].isin(pos["code"].unique())]
+    close_tab = px.drop_duplicates(["date", "code"]).pivot(index="date", columns="code", values="close")
+    close_tab = close_tab.reindex(sorted(set(close_tab.index) | set(nav["date"]))).ffill()
+    tv = nav.set_index("date")["total_value"]
     positions = {}
     for d, g in pos.groupby("date"):
-        positions[str(d)] = [[r.code, int(r.qty)] for r in g.itertuples()]
+        rows = []
+        for r in g.itertuples():
+            try:
+                price = close_tab.at[d, r.code]
+            except KeyError:
+                price = None
+            pct = round(r.qty * price / tv[d], 4) if pd.notna(price) and d in tv.index else None
+            rows.append([r.code, int(r.qty), pct])
+        positions[d] = rows
 
     # ---- 大盘 N20/N5 状态 ----
     st = pd.read_csv(BASE / "data" / "composite_n20n5_states.csv", encoding="utf-8-sig")
@@ -123,6 +157,14 @@ def main():
             "sell": tx.get("sell", []),
             "buy": tx.get("buy", []),
         }
+        # T+1 目标持仓（precompute_holdings.csv，自带 weight 列）
+        hf = f.with_name(f.name.replace("_precompute.json", "_precompute_holdings.csv"))
+        if hf.exists():
+            hd = pd.read_csv(hf, dtype={"code": str}, encoding="utf-8-sig")
+            hd["code"] = hd["code"].str.strip().str.zfill(6)
+            entry["t1_holdings"] = [
+                [r.code, int(r.qty), round(r.weight, 4)] for r in hd.itertuples()
+            ]
         signals[d] = entry
 
     data = {
@@ -130,6 +172,7 @@ def main():
         "metrics": metrics,
         "nav": nav_series,
         "weights": weight_series,
+        "benchmarks": benchmarks,
         "positions": positions,
         "market_state": market_state,
         "reductions": reductions,
