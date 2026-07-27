@@ -1,16 +1,18 @@
 @echo off
-chcp 65001 >nul
 cd /d "%~dp0"
+
+for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyy-MM-dd"') do set TODAY=%%i
+
 echo ============================================
-echo  ç­–ç•¥å±•ç¤ºç«™ - åŠè‡ªåŠ¨éƒ¨ç½²
+echo  ²ßÂÔÕ¹Ê¾Õ¾ - °ë×Ô¶¯²¿Êğ (%TODAY%)
 echo ============================================
 echo.
 
-echo [1/3] é‡æ–°ç”Ÿæˆ macro407/data.js ...
+echo [1/3] ÖØĞÂÉú³É macro407/data.js ...
 python build_data.py
 if errorlevel 1 (
     echo.
-    echo [å¤±è´¥] build_data.py è¿è¡Œå‡ºé”™ï¼Œæœªåšä»»ä½•æäº¤ã€‚
+    echo [Ê§°Ü] build_data.py ÔËĞĞ³ö´í£¬Î´×öÈÎºÎÌá½»¡£
     pause
     exit /b 1
 )
@@ -19,33 +21,33 @@ echo.
 git add -A
 git diff --cached --quiet
 if not errorlevel 1 (
-    echo [2/3] æ•°æ®æ— å˜åŒ–ï¼Œæ— éœ€æäº¤ã€‚ç½‘ç«™ä¿æŒç°çŠ¶ã€‚
+    echo [2/3] Êı¾İÎŞ±ä»¯£¬ÎŞĞèÌá½»¡£ÍøÕ¾±£³ÖÏÖ×´¡£
     echo.
     pause
     exit /b 0
 )
 
-echo [2/3] æäº¤å˜æ›´ ...
-git commit -m "update macro407 %date:~0,4%-%date:~5,2%-%date:~8,2%"
+echo [2/3] Ìá½»±ä¸ü ...
+git commit -m "update macro407 %TODAY%"
 if errorlevel 1 (
     echo.
-    echo [å¤±è´¥] git commit å‡ºé”™ã€‚
+    echo [Ê§°Ü] git commit ³ö´í¡£
     pause
     exit /b 1
 )
 echo.
 
-echo [3/3] æ¨é€åˆ° GitHub ...
+echo [3/3] ÍÆËÍµ½ GitHub ...
 git push
 if errorlevel 1 (
     echo.
-    echo [å¤±è´¥] git push å‡ºé”™ï¼ˆé¦–æ¬¡æ¨é€å¯èƒ½éœ€è¦ç™»å½•æˆæƒï¼Œè¯·é‡è¯•ï¼‰ã€‚
+    echo [Ê§°Ü] git push ³ö´í£¨Ê×´ÎÍÆËÍ¿ÉÄÜĞèÒªµÇÂ¼ÊÚÈ¨£¬ÇëÖØÊÔ£©¡£
     pause
     exit /b 1
 )
 
 echo.
 echo ============================================
-echo  å®Œæˆï¼GitHub Pages çº¦ 1 åˆ†é’Ÿåè‡ªåŠ¨æ›´æ–°ã€‚
+echo  Íê³É£¡GitHub Pages Ô¼ 1 ·ÖÖÓºó×Ô¶¯¸üĞÂ¡£
 echo ============================================
 pause
