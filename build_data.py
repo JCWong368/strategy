@@ -12,7 +12,8 @@ import pandas as pd
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]  # 选股回测代码根目录
-BASE = ROOT / "13_宏观配置" / "宏观配置4.0.7_open_open_A股7.2.7_4to2_HK15_T日收盘减仓"
+# 4.0.7 策略目录（2026-08-07 起归档至 实盘运行策略/，13_宏观配置/ 下旧目录已冻结）
+BASE = ROOT / "实盘运行策略" / "宏观配置4.0.7"
 OUT = HERE / "macro407" / "data.js"
 
 MODULES = ["w_a_stock", "w_hk", "w_commodity", "w_global", "w_cash", "w_alt_501025"]
