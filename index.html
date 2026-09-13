@@ -21,7 +21,7 @@
 </head>
 <body>
 <h1>策略展示总站</h1>
-<div class="sub">量化策略回测结果展示</div>
+<div class="sub">量化策略回测结果与信号监控展示</div>
 <div class="cards" id="cards"></div>
 <script>
 // 新增策略：在数组里加一项即可
@@ -30,6 +30,11 @@ const STRATEGIES = [
     url: "macro407/",
     name: "宏观配置4.0.7",
     desc: "open_open · A股7.2.7 · 4to2 · HK15 · T日收盘减仓｜净值/回撤曲线、模块权重、每日持仓与信号",
+  },
+  {
+    url: "signals/",
+    name: "信号监控面板",
+    desc: "六模块监控最新信号｜杠杆资金 · 微盘股 · 赛道拥挤度 · 市场环境 · 资金抱团 · 市场结构，含近一年时序图与灯号时间条",
   },
 ];
 document.getElementById("cards").innerHTML = STRATEGIES.map(s =>

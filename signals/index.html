@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>17_信号监控 · 信号面板</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+         background: #f4f6fa; color: #2b3445; max-width: 900px;
+         margin: 0 auto; padding: 32px 18px 60px; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  .sub { color: #8492a6; font-size: 13px; margin-bottom: 18px; }
+  .banner { border-radius: 8px; padding: 10px 14px; font-size: 13px;
+            margin-bottom: 16px; line-height: 1.7; }
+  .banner.warn { background: #fdf6e3; color: #8a6d1a; border: 1px solid #ecd98a; }
+  .banner.alert { background: #fdeaea; color: #9c2b2b; border: 1px solid #f0b4b4; }
+  .cards { display: grid; grid-template-columns: 1fr; gap: 18px; }
+  .card { background: #fff; border-radius: 10px; padding: 20px;
+          box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .card .head { display: flex; align-items: center; gap: 10px;
+                flex-wrap: wrap; margin-bottom: 10px; }
+  .card .name { font-size: 17px; font-weight: 600; }
+  .card .dir { font-size: 12px; color: #98a4b8; }
+  .badge { display: inline-block; min-width: 46px; text-align: center;
+           padding: 3px 12px; border-radius: 20px; color: #fff;
+           font-size: 14px; font-weight: 600; }
+  .badge.ok { background: #2ca02c; } .badge.warn { background: #e6b800; }
+  .badge.alert { background: #d62728; } .badge.unknown { background: #98a4b8; }
+  .date { font-size: 12px; color: #8492a6; }
+  .stale { font-size: 12px; margin-left: auto; }
+  .stale.ok { color: #2ca02c; } .stale.warn { color: #b8860b; }
+  .stale.alert { color: #d62728; }
+  .reason { font-size: 14px; line-height: 1.7; background: #f7f9fc;
+            border-radius: 6px; padding: 10px 12px; margin: 10px 0; }
+  .headline { display: flex; gap: 18px; flex-wrap: wrap; margin: 8px 0 12px; }
+  .headline .item { font-size: 13px; color: #5a6a85; }
+  .headline .item b { color: #2b3445; font-size: 15px; margin-left: 4px; }
+  table.ind { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.ind td { padding: 7px 8px; border-top: 1px solid #eef1f6;
+                 vertical-align: top; }
+  table.ind td.lab { color: #5a6a85; white-space: nowrap; width: 150px; }
+  table.ind td.val { font-weight: 600; white-space: nowrap; }
+  table.ind td.note { color: #8492a6; }
+  .alerts { margin: 10px 0; }
+  .alerts .title { font-size: 13px; font-weight: 600; color: #b8860b;
+                   margin-bottom: 6px; }
+  .alert-item { border: 1px solid #ecd98a; background: #fdf9ec;
+                border-radius: 6px; padding: 8px 10px; margin-bottom: 6px;
+                font-size: 13px; line-height: 1.6; }
+  .alert-item b { color: #8a6d1a; }
+  .extra { font-size: 13px; color: #5a6a85; margin: 8px 0;
+           border-left: 3px solid #5470c6; padding: 4px 10px; }
+  details { margin-top: 12px; font-size: 13px; }
+  summary { cursor: pointer; color: #5470c6; font-weight: 600; }
+  details .exp { margin: 8px 0 4px; padding: 10px 12px; background: #f7f9fc;
+                  border-radius: 6px; line-height: 1.7; color: #45536b; }
+  details .exp b { color: #2b3445; }
+  .notes { margin-top: 10px; font-size: 12px; color: #98a4b8; line-height: 1.8; }
+  .chart { height: 270px; margin: 6px 0 2px; }
+  .strip { display: flex; height: 9px; border-radius: 4px; overflow: hidden;
+           margin: 0 0 6px; background: #eef1f6; }
+  .strip span { flex: 1; }
+  .strip-cap { font-size: 11px; color: #98a4b8; margin-bottom: 8px; }
+  .val-ok { color: #2ca02c; font-weight: 700; }
+  .val-bad { color: #d62728; font-weight: 700; }
+  footer { margin-top: 28px; font-size: 12px; color: #98a4b8; line-height: 1.9;
+           border-top: 1px solid #e5eaf2; padding-top: 14px; }
+  footer a { color: #5470c6; text-decoration: none; }
+  .build-err { color: #d62728; font-size: 13px; padding: 8px 0; }
+</style>
+</head>
+<body>
+<h1>信号监控面板</h1>
+<div class="sub">17_信号监控 · 最新日数据与信号 + 近一年走势（更早历史见各模块 panel.png）</div>
+<div id="banner"></div>
+<div class="cards" id="cards"></div>
+<footer id="footer"></footer>
+<script src="echarts.min.js"></script>
+<script src="data.js"></script>
+<script>
+const LIGHT_CLASS = {"红":"alert", "橙":"alert", "黄":"warn", "绿":"ok"};
+const LIGHT_COLOR = {"红":"#d62728", "橙":"#ff7f0e", "黄":"#e6b800", "绿":"#2ca02c"};
+const esc = s => String(s ?? "").replace(/[&<>"]/g,
+  c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function bannerHtml(D){
+  const warns = D.modules.filter(m => m.stale && m.stale.level !== "ok"
+                                      && m.stale.level !== "unknown");
+  if (!warns.length) return "";
+  const lv = warns.some(m => m.stale.level === "alert") ? "alert" : "warn";
+  const txt = warns.map(m => `${m.name}（${m.trade_date}，${m.stale.label}）`).join("；");
+  return `<div class="banner ${lv}">⚠ 数据时效提醒：${esc(txt)}。请检查对应监控的定时任务。</div>`;
+}
+
+function cardHtml(m){
+  if (m.error) return `<div class="card"><div class="name">${esc(m.name)}</div>
+    <div class="build-err">${esc(m.error)}</div></div>`;
+  const lc = LIGHT_CLASS[m.light] || "unknown";
+  const badge = m.light
+    ? `<span class="badge ${lc}">${esc(m.light)}</span>` : "";
+  const rows = (m.indicators || []).map(r =>
+    `<tr><td class="lab">${esc(r.label)}</td>
+        <td class="val">${esc(r.value ?? "—")}</td>
+        <td class="note">${esc(r.note || "")}</td></tr>`).join("");
+  const head = (m.headline || []).map(h =>
+    `<span class="item">${esc(h.label)}<b>${esc(h.value ?? "—")}</b></span>`).join("");
+  const alerts = (m.alerts || []).map(a =>
+    `<div class="alert-item"><b>${esc(a.track)}</b>　${esc(a.title)}<br>${esc(a.detail || "")}</div>`).join("");
+  const exps = Object.entries(m.explanations || {}).map(([k, v]) =>
+    (v && typeof v === "object")
+      ? `<div class="exp"><b>${esc(k)}</b>：` + Object.entries(v).map(([k2, v2]) =>
+          `<br>· <b>${esc(k2)}</b>　${esc(v2)}`).join("") + `</div>`
+      : `<div class="exp"><b>${esc(k)}</b>：${esc(v)}</div>`).join("");
+  const val = Object.entries(m.validation || {}).map(([k, v]) =>
+    `<span class="${v ? "val-ok" : "val-bad"}">${v ? "✔" : "✘"} ${esc(k)}</span>`).join("　");
+  const extra = m.extra ? `<div class="extra">${esc(m.extra.label)}：${esc(m.extra.value)}
+    ${m.extra.note ? `<div style="color:#98a4b8;font-size:12px">${esc(m.extra.note)}</div>` : ""}</div>` : "";
+  return `<div class="card">
+    <div class="head">
+      ${badge}
+      <span class="name">${esc(m.name)}</span>
+      <span class="dir">${esc(m.dir)}/</span>
+      <span class="date">数据日 ${esc(m.trade_date)}</span>
+      <span class="stale ${m.stale.level}">${esc(m.stale.label)}</span>
+    </div>
+    <div class="reason">${esc(m.reason || "")}</div>
+    <div class="headline">${head}</div>
+    ${m.history ? `<div class="chart" id="chart-${esc(m.key)}"></div>` : ""}
+    ${m.history2 ? `<div class="chart" id="chart2-${esc(m.key)}"></div>` : ""}
+    ${stripHtml(m)}
+    <table class="ind">${rows}</table>
+    ${alerts ? `<div class="alerts"><div class="title">活跃黄灯</div>${alerts}</div>` : ""}
+    ${extra}
+    ${exps ? `<details><summary>信号说明（口径与证据）</summary>${exps}</details>` : ""}
+    ${(m.data_notes || []).length || val ? `<div class="notes">
+        ${(m.data_notes || []).map(esc).join("　|　")}${val ? "<br>校验：" + val : ""}</div>` : ""}
+  </div>`;
+}
+
+function stripHtml(m){
+  const h = m.history;
+  if (!h || !h.lights || !h.lights.some(x => x)) return "";
+  const cells = h.dates.map((d, i) => {
+    const c = LIGHT_COLOR[h.lights[i]] || "#c9d3e0";
+    return `<span style="background:${c}" title="${esc(d)} ${esc(h.lights[i] || "无灯号")}"></span>`;
+  }).join("");
+  return `<div class="strip">${cells}</div>
+    <div class="strip-cap">近一年灯号时间条（悬停看日期）</div>`;
+}
+
+function chartOption(m){
+  const h = m.history, S = h.series;
+  const tt = {trigger: "axis", textStyle: {fontSize: 12}};
+  const lg = {top: 0, textStyle: {fontSize: 11}, itemWidth: 16};
+  const ax = gi => ({type: "category", data: h.dates, gridIndex: gi,
+                     show: gi === 0, axisLabel: {fontSize: 11},
+                     axisLine: {lineStyle: {color: "#c9d3e0"}}});
+  const ln = (s, extra) => Object.assign({name: s.name, type: "line",
+    data: s.data, showSymbol: false, lineStyle: {width: 1.6}, connectNulls: true}, extra || {});
+  const axNum = (gi, extra) => Object.assign({type: "value", gridIndex: gi,
+    scale: true, axisLabel: {fontSize: 11},
+    splitLine: {lineStyle: {color: "#eef1f6"}}}, extra || {});
+  if (m.key === "leverage" || m.key === "microcap"){
+    return {tooltip: tt, legend: lg,
+      axisPointer: [{link: [{xAxisIndex: "all"}]}],
+      grid: [{left: 70, right: 70, top: 32, height: "50%"},
+             {left: 70, right: 70, top: "74%", height: "16%"}],
+      xAxis: [ax(0), ax(1)],
+      yAxis: [axNum(0), axNum(0, {position: "right", splitLine: {show: false}}),
+              axNum(1, Object.assign({splitNumber: 2},
+                m.key === "leverage" ? {min: 0, max: 1} : {}))],
+      series: [ln(S[0]), ln(S[1], {yAxisIndex: 1}),
+               ln(S[2], {xAxisIndex: 1, yAxisIndex: 2, areaStyle: {opacity: 0.12}})]};
+  }
+  if (m.key === "crowd"){
+    return {tooltip: tt, legend: lg,
+      grid: [{left: 46, right: 20, top: 32, bottom: 30}],
+      xAxis: [ax(0)],
+      yAxis: [axNum(0, {minInterval: 1})],
+      series: [
+        Object.assign(ln(S[0], {type: "bar", itemStyle: {color: "#5470c6", opacity: .75}}),
+          {markLine: {silent: true, symbol: "none",
+            lineStyle: {type: "dashed", color: "#ff7f0e"},
+            label: {formatter: "橙灯阈值 3", fontSize: 11, position: "insideStartTop"},
+            data: [{yAxis: 3}]}}),
+        ln(S[1], {itemStyle: {color: "#e6b800"}})]};
+  }
+  if (m.key === "herd"){
+    return {tooltip: tt, legend: lg,
+      grid: [{left: 46, right: 20, top: 32, bottom: 30}],
+      xAxis: [ax(0)],
+      yAxis: [axNum(0, {min: 0, max: 100})],
+      series: [
+        Object.assign(ln(S[0], {itemStyle: {color: "#d62728"}}),
+          {markLine: {silent: true, symbol: "none",
+            lineStyle: {type: "dashed", color: "#888888"},
+            label: {formatter: "阈值 85", fontSize: 11, position: "insideStartTop"},
+            data: [{yAxis: 85}]}})]};
+  }
+  if (m.key === "structure"){
+    return {tooltip: tt, legend: lg,
+      grid: [{left: 46, right: 20, top: 32, bottom: 30}],
+      xAxis: [ax(0)],
+      yAxis: [axNum(0, {min: 0, max: 100})],
+      series: [
+        ln(S[0], {itemStyle: {color: "#2ca02c"}}),
+        ln(S[1], {itemStyle: {color: "#d62728"}}),
+        ln(S[2], {itemStyle: {color: "#1f77b4"}}),
+        ln(S[3], {itemStyle: {color: "#7b3fb5"}}),
+        Object.assign(ln(S[4], {itemStyle: {color: "#e67e22"}}),
+          {markLine: {silent: true, symbol: "none",
+            lineStyle: {type: "dashed", color: "#888888"},
+            label: {formatter: "60/40 阈值", fontSize: 11, position: "insideStartTop"},
+            data: [{yAxis: 60}, {yAxis: 40}]}})]};
+  }
+  // env：系数类阶梯线，共用一个 0 起步坐标轴
+  return {tooltip: tt, legend: lg,
+    grid: [{left: 46, right: 20, top: 32, bottom: 30}],
+    xAxis: [ax(0)],
+    yAxis: [axNum(0, {min: 0})],
+    series: S.map(s => ln(s, {step: "end"}))};
+}
+
+function chartOption2(m){
+  // 第二独立面板（目前仅 structure：波动率监控 V，左轴原始值% / 右轴分位）
+  const h = m.history2, S = h.series;
+  const tt = {trigger: "axis", textStyle: {fontSize: 12}};
+  const lg = {top: 26, textStyle: {fontSize: 11}, itemWidth: 16};
+  const ln = (s, extra) => Object.assign({name: s.name, type: "line",
+    data: s.data, showSymbol: false, lineStyle: {width: 1.6}, connectNulls: true}, extra || {});
+  if (m.key === "structure"){
+    return {
+      title: {text: "波动率监控（V）",
+        subtext: "V分位>90 且 C2分位<40 且 A3分位<40 = 微盘危机型签名（红灯条件之一）",
+        left: 46, top: 0, textStyle: {fontSize: 13}, subtextStyle: {fontSize: 11}},
+      tooltip: tt, legend: lg,
+      grid: [{left: 46, right: 46, top: 58, bottom: 30}],
+      xAxis: [{type: "category", data: h.dates, axisLabel: {fontSize: 11},
+               axisLine: {lineStyle: {color: "#c9d3e0"}}}],
+      yAxis: [{type: "value", scale: true, name: "V(%)",
+               axisLabel: {fontSize: 11}, splitLine: {lineStyle: {color: "#eef1f6"}}},
+              {type: "value", min: 0, max: 100, name: "分位", position: "right",
+               axisLabel: {fontSize: 11}, splitLine: {show: false}}],
+      series: [
+        ln(S[0], {itemStyle: {color: "#2c3e50"}}),
+        Object.assign(ln(S[1], {yAxisIndex: 1, itemStyle: {color: "#e74c3c"}}),
+          {markLine: {silent: true, symbol: "none",
+            lineStyle: {type: "dashed", color: "#e74c3c"},
+            label: {formatter: "危机签名阈值 90", fontSize: 11, position: "insideStartTop"},
+            data: [{yAxis: 90}]}})]};
+  }
+  return {};
+}
+
+function renderCharts(D){
+  if (!window.echarts) return;
+  for (const m of D.modules){
+    if (m.error || !m.history) continue;
+    const el = document.getElementById("chart-" + m.key);
+    if (!el) continue;
+    try { echarts.init(el).setOption(chartOption(m)); }
+    catch (e) { el.innerHTML = `<div class="build-err">图表渲染失败：${esc(e.message)}</div>`; }
+  }
+  for (const m of D.modules){
+    if (m.error || !m.history2) continue;
+    const el2 = document.getElementById("chart2-" + m.key);
+    if (!el2) continue;
+    try { echarts.init(el2).setOption(chartOption2(m)); }
+    catch (e) { el2.innerHTML = `<div class="build-err">图表渲染失败：${esc(e.message)}</div>`; }
+  }
+}
+
+const D = window.SIGNAL_DATA || {modules: []};
+document.getElementById("banner").innerHTML = bannerHtml(D);
+document.getElementById("cards").innerHTML = D.modules.map(cardHtml).join("");
+renderCharts(D);
+document.getElementById("footer").innerHTML =
+  `生成于 ${esc(D.generated_at || "—")}　|　源：各模块 latest_snapshot.json`
+  + `　|　<a href="../赛道拥挤度跟踪/README.md">赛道拥挤度血缘(O8–O11)</a>`
+  + `　|　信号为研究口径输出，非交易指令`;
+</script>
+</body>
+</html>
