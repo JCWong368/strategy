@@ -214,6 +214,26 @@ function chartOption(m){
             label: {formatter: "60/40 阈值", fontSize: 11, position: "insideStartTop"},
             data: [{yAxis: 60}, {yAxis: 40}]}})]};
   }
+  if (m.key === "strategic"){
+    // 战略环境轴：F_weak 左轴(0~1，θ=0.18 虚线) + G4 右轴(τ=+5% 虚线)
+    return {tooltip: tt, legend: lg,
+      grid: [{left: 46, right: 56, top: 32, bottom: 30}],
+      xAxis: [ax(0)],
+      yAxis: [axNum(0, {min: 0, max: 1}),
+              axNum(0, {position: "right", splitLine: {show: false},
+                axisLabel: {fontSize: 11, formatter: v => (v*100).toFixed(0)+"%"}})],
+      series: [
+        Object.assign(ln(S[0], {itemStyle: {color: "#d62728"}}),
+          {markLine: {silent: true, symbol: "none",
+            lineStyle: {type: "dashed", color: "#d62728"},
+            label: {formatter: "θ_weak=0.18", fontSize: 11, position: "insideStartTop"},
+            data: [{yAxis: 0.18}]}}),
+        Object.assign(ln(S[1], {yAxisIndex: 1, itemStyle: {color: "#1f77b4"}}),
+          {markLine: {silent: true, symbol: "none",
+            lineStyle: {type: "dashed", color: "#1f77b4"},
+            label: {formatter: "τ=+5%", fontSize: 11, position: "insideEndTop"},
+            data: [{yAxis: 0.05}]}})]};
+  }
   // env：系数类阶梯线，共用一个 0 起步坐标轴
   return {tooltip: tt, legend: lg,
     grid: [{left: 46, right: 20, top: 32, bottom: 30}],
