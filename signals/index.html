@@ -145,7 +145,9 @@ function stripHtml(m){
     const c = LIGHT_COLOR[h.lights[i]] || "#c9d3e0";
     return `<span style="background:${c}" title="${esc(d)} ${esc(h.lights[i] || "无灯号")}"></span>`;
   }).join("");
-  return `<div class="strip">${cells}</div>
+  // 与主图 grid 的 left/right 边距对齐（类别轴 boundaryGap 居中，两边同宽间距天然逐日对位）
+  const [ml, mr] = STRIP_MARGIN[m.key] || [46, 20];
+  return `<div class="strip" style="margin-left:${ml}px;margin-right:${mr}px">${cells}</div>
     <div class="strip-cap">近一年灯号时间条（悬停看日期）</div>`;
 }
 
@@ -292,6 +294,10 @@ function renderCharts(D){
 }
 
 const D = window.SIGNAL_DATA || {modules: []};
+// 灯号时间条与主图时间轴对齐：各模块主图 grid 的 [left, right] 边距（见 chartOption）
+const STRIP_MARGIN = {leverage: [70, 70], microcap: [70, 70],
+                      crowd: [46, 20], herd: [46, 20], structure: [46, 20],
+                      strategic: [46, 56]};
 document.getElementById("banner").innerHTML = bannerHtml(D);
 document.getElementById("cards").innerHTML = D.modules.map(cardHtml).join("");
 renderCharts(D);
