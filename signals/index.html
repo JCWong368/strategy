@@ -114,8 +114,13 @@ function cardHtml(m){
       : `<div class="exp"><b>${esc(k)}</b>：${esc(v)}</div>`).join("");
   const val = Object.entries(m.validation || {}).map(([k, v]) =>
     `<span class="${v ? "val-ok" : "val-bad"}">${v ? "✔" : "✘"} ${esc(k)}</span>`).join("　");
+  const exps_html = exps ? `<details><summary>信号说明（口径与证据）</summary>${exps}</details>` : "";
   const extra = m.extra ? `<div class="extra">${esc(m.extra.label)}：${esc(m.extra.value)}
     ${m.extra.note ? `<div style="color:#98a4b8;font-size:12px">${esc(m.extra.note)}</div>` : ""}</div>` : "";
+  const gloss = (m.glossary || []).length
+    ? `<details><summary>指标说明（定义与读法）</summary>`
+      + m.glossary.map(g => `<div class="exp"><b>${esc(g.term)}</b>：${esc(g.def)}</div>`).join("")
+      + `</details>` : "";
   return `<div class="card">
     <div class="head">
       ${badge}
@@ -127,12 +132,13 @@ function cardHtml(m){
     <div class="reason">${esc(m.reason || "")}</div>
     <div class="headline">${head}</div>
     ${m.history ? `<div class="chart" id="chart-${esc(m.key)}"></div>` : ""}
-    ${m.history2 ? `<div class="chart" id="chart2-${esc(m.key)}"></div>` : ""}
+    ${m.history2 ? `<div class="chart" id="chart2-${esc(m.key)}" style="height:320px"></div>` : ""}
     ${stripHtml(m)}
     <table class="ind">${rows}</table>
     ${alerts ? `<div class="alerts"><div class="title">活跃黄灯</div>${alerts}</div>` : ""}
     ${extra}
-    ${exps ? `<details><summary>信号说明（口径与证据）</summary>${exps}</details>` : ""}
+    ${exps_html}
+    ${gloss}
     ${(m.data_notes || []).length || val ? `<div class="notes">
         ${(m.data_notes || []).map(esc).join("　|　")}${val ? "<br>校验：" + val : ""}</div>` : ""}
   </div>`;
@@ -201,7 +207,9 @@ function chartOption(m){
             data: [{yAxis: 85}]}})]};
   }
   if (m.key === "structure"){
-    return {tooltip: tt, legend: lg,
+    // 5 条图例较长：type:scroll 防窄屏换行压住绘图区
+    const lgScroll = Object.assign({type: "scroll"}, lg);
+    return {tooltip: tt, legend: lgScroll,
       grid: [{left: 46, right: 20, top: 32, bottom: 30}],
       xAxis: [ax(0)],
       yAxis: [axNum(0, {min: 0, max: 100})],
@@ -256,8 +264,10 @@ function chartOption2(m){
       title: {text: "波动率监控（V）",
         subtext: "V分位>90 且 C2分位<40 且 A3分位<40 = 微盘危机型签名（红灯条件之一）",
         left: 46, top: 0, textStyle: {fontSize: 13}, subtextStyle: {fontSize: 11}},
-      tooltip: tt, legend: lg,
-      grid: [{left: 46, right: 46, top: 58, bottom: 30}],
+      tooltip: tt,
+      // 标题+副标题约占 0~40px，图例下移到 44，绘图区再下移，避免重叠
+      legend: Object.assign({}, lg, {top: 44}),
+      grid: [{left: 46, right: 46, top: 76, bottom: 30}],
       xAxis: [{type: "category", data: h.dates, axisLabel: {fontSize: 11},
                axisLine: {lineStyle: {color: "#c9d3e0"}}}],
       yAxis: [{type: "value", scale: true, name: "V(%)",
