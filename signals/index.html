@@ -128,8 +128,8 @@ function cardHtml(m){
       + `</details>` : "";
   const panelLink = m.panel_link
     ? `<div class="panel-link"><a href="${esc(m.panel_link.href)}">${esc(m.panel_link.label)}</a></div>` : "";
-  const alertsBlock = (alerts || m.key === "strategic")
-    ? `<div class="alerts"><div class="title">${m.key === "strategic" ? "当日告警（L4）" : "活跃黄灯"}</div>${alerts || "<div class='alert-item'>无</div>"}</div>` : "";
+  const alertsBlock = (alerts || m.alerts_title || m.key === "strategic")
+    ? `<div class="alerts"><div class="title">${esc(m.alerts_title || (m.key === "strategic" ? "当日告警（L4）" : "活跃黄灯"))}</div>${alerts || "<div class='alert-item'>无</div>"}</div>` : "";
   return `<div class="card">
     <div class="head">
       ${badge}
@@ -142,8 +142,9 @@ function cardHtml(m){
     <div class="headline">${head}</div>
     ${panelLink}
     ${m.history ? `<div class="chart" id="chart-${esc(m.key)}"></div>` : ""}
-    ${m.history2 ? `<div class="chart" id="chart2-${esc(m.key)}" style="height:320px"></div>` : ""}
     ${stripHtml(m)}
+    ${m.history2 ? `<div class="chart" id="chart2-${esc(m.key)}" style="height:320px"></div>` : ""}
+    ${strip2Html(m)}
     <table class="ind">${rows}</table>
     ${alertsBlock}
     ${extra}
@@ -165,6 +166,18 @@ function stripHtml(m){
   const [ml, mr] = STRIP_MARGIN[m.key] || [46, 20];
   return `<div class="strip" style="margin-left:${ml}px;margin-right:${mr}px">${cells}</div>
     <div class="strip-cap">近一年灯号时间条（悬停看日期）</div>`;
+}
+
+function strip2Html(m){
+  const h = m.history2;
+  if (!h || !h.lights || !h.lights.some(x => x)) return "";
+  const cells = h.dates.map((d, i) => {
+    const c = LIGHT_COLOR[h.lights[i]] || "#c9d3e0";
+    return `<span style="background:${c}" title="${esc(d)} ${esc(h.lights[i] || "无灯号")}"></span>`;
+  }).join("");
+  // chart2 季度图 grid 边距 [46, 20]
+  return `<div class="strip" style="margin-left:46px;margin-right:20px">${cells}</div>
+    <div class="strip-cap">全历史（季度）灯号时间条（黄=背景分位≥0.8；红仅日度层）</div>`;
 }
 
 function chartOption(m){
@@ -215,6 +228,19 @@ function chartOption(m){
             lineStyle: {type: "dashed", color: "#888888"},
             label: {formatter: "阈值 85", fontSize: 11, position: "insideStartTop"},
             data: [{yAxis: 85}]}})]};
+  }
+  if (m.key === "fund_herd"){
+    // 日度瓦解层：池/全A 净值（链式续接，窗口起点=1，左轴）+ 池成交配比（右轴 %）
+    return {tooltip: tt, legend: lg,
+      grid: [{left: 46, right: 56, top: 32, bottom: 30}],
+      xAxis: [ax(0)],
+      yAxis: [axNum(0),
+              axNum(0, {position: "right", splitLine: {show: false},
+                axisLabel: {fontSize: 11, formatter: v => v.toFixed(1) + "%"}})],
+      series: [ln(S[0], {itemStyle: {color: "#2251ff"}}),
+               ln(S[1], {itemStyle: {color: "#8595a6"}}),
+               ln(S[2], {yAxisIndex: 1, itemStyle: {color: "#c22f4e"},
+                         areaStyle: {opacity: 0.08}})]};
   }
   if (m.key === "structure"){
     // 5 条图例较长：type:scroll 防窄屏换行压住绘图区
@@ -269,6 +295,32 @@ function chartOption2(m){
   const lg = {top: 26, textStyle: {fontSize: 11}, itemWidth: 16};
   const ln = (s, extra) => Object.assign({name: s.name, type: "line",
     data: s.data, showSymbol: false, lineStyle: {width: 1.6}, connectNulls: true}, extra || {});
+  if (m.key === "fund_herd"){
+    // 季度层全历史 42 季（季度点不插值；gap 仅 Q1/Q3 有值，禁跨口径连线）
+    const lnc = (s, extra) => Object.assign({name: s.name, type: "line", data: s.data,
+      showSymbol: true, symbolSize: 4, connectNulls: false,
+      lineStyle: {width: 1.4}}, extra || {});
+    return {
+      title: {text: "抱团度季度主线（全历史 42 季）",
+        subtext: "0.8/0.9=历史分位阈值线；gap 裂口仅 Q1/Q3 市值·前十大口径有值，禁止跨口径连线",
+        left: 46, top: 0, textStyle: {fontSize: 13}, subtextStyle: {fontSize: 11}},
+      tooltip: tt,
+      legend: Object.assign({}, lg, {top: 44}),
+      grid: [{left: 46, right: 20, top: 78, bottom: 30}],
+      xAxis: [{type: "category", data: h.dates, axisLabel: {fontSize: 10, interval: 3},
+               axisLine: {lineStyle: {color: "#c9d3e0"}}}],
+      yAxis: [{type: "value", min: 0, max: 1, axisLabel: {fontSize: 11},
+               splitLine: {lineStyle: {color: "#eef1f6"}}}],
+      series: [
+        Object.assign(lnc(S[0], {itemStyle: {color: "#2251ff"}}),
+          {markLine: {silent: true, symbol: "none",
+            lineStyle: {type: "dashed", color: "#b8860b"},
+            label: {fontSize: 10}, data: [{yAxis: 0.8, label: {formatter: "0.8"}},
+                                          {yAxis: 0.9, label: {formatter: "0.9"}}]}}),
+        lnc(S[1], {itemStyle: {color: "#c22f4e"}}),
+        lnc(S[2], {itemStyle: {color: "#42566a"}, lineStyle: {width: 1, type: "dashed"}}),
+        lnc(S[3], {itemStyle: {color: "#e6b800"}})]};
+  }
   if (m.key === "structure"){
     return {
       title: {text: "波动率监控（V）",
@@ -316,7 +368,8 @@ function renderCharts(D){
 const D = window.SIGNAL_DATA || {modules: []};
 // 灯号时间条与主图时间轴对齐：各模块主图 grid 的 [left, right] 边距（见 chartOption）
 const STRIP_MARGIN = {leverage: [70, 70], microcap: [70, 70],
-                      crowd: [46, 20], herd: [46, 20], structure: [46, 20],
+                      crowd: [46, 20], herd: [46, 20], fund_herd: [46, 56],
+                      structure: [46, 20],
                       strategic: [46, 56]};
 document.getElementById("banner").innerHTML = bannerHtml(D);
 document.getElementById("cards").innerHTML = D.modules.map(cardHtml).join("");
