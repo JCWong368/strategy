@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-宏观配置4.0.7 网页展示数据生成脚本
-读取策略回测结果 CSV + 近期 precompute JSON，生成 data.js（window.STRATEGY_DATA = {...}）。
+策略网页展示数据生成脚本
+读取策略回测结果 CSV + 近期 precompute JSON，生成各策略目录下 data.js（window.STRATEGY_DATA = {...}）。
 用法: python build_data.py
+新增策略：在 STRATEGIES 里加一行 (策略目录, 页面目录) 即可。
 """
 import json
 import math
@@ -12,19 +13,22 @@ import pandas as pd
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]  # 选股回测代码根目录
-# 4.0.7 策略目录（2026-08-07 起归档至 实盘运行策略/，13_宏观配置/ 下旧目录已冻结）
-BASE = ROOT / "实盘运行策略" / "宏观配置4.0.7"
-OUT = HERE / "macro407" / "data.js"
+
+STRATEGIES = [
+    # (策略归档目录相对 ROOT, 页面目录相对 HERE)
+    ("实盘运行策略/宏观配置4.0.7", "macro407"),
+    ("实盘运行策略/宏观配置四态环境系数周度1.0", "weeklyenv1"),
+]
 
 MODULES = ["w_a_stock", "w_hk", "w_commodity", "w_global", "w_cash", "w_alt_501025"]
 
 
-def load_names() -> dict:
+def load_names(base: Path) -> dict:
     names = {}
     for path, col in [
         (ROOT / "03_运行类" / "long_table_code_names.csv", "name"),
-        (BASE / "data" / "ETF_my_pool_unique_66.csv", "基金简称"),
-        (BASE / "data" / "hk" / "ETF精选池_跨境_香港.csv", "名称"),
+        (base / "data" / "ETF_my_pool_unique_66.csv", "基金简称"),
+        (base / "data" / "hk" / "ETF精选池_跨境_香港.csv", "名称"),
     ]:
         if path.exists():
             df = pd.read_csv(path, dtype={"code": str}, encoding="utf-8-sig")
@@ -35,11 +39,11 @@ def load_names() -> dict:
     return names
 
 
-def main():
-    names = load_names()
+def build(base: Path, out: Path):
+    names = load_names(base)
 
     # ---- 净值 & 模块权重 ----
-    nav = pd.read_csv(BASE / "results" / "nav_curve.csv", encoding="utf-8-sig")
+    nav = pd.read_csv(base / "results" / "nav_curve.csv", encoding="utf-8-sig")
     nav["date"] = nav["date"].astype(str)
     nav = nav.sort_values("date").reset_index(drop=True)
     nav["dd"] = nav["combo_nav"] / nav["combo_nav"].cummax() - 1.0
@@ -94,7 +98,7 @@ def main():
         benchmarks["等权基准"] = [round(v, 6) if pd.notna(v) else None for v in ew]
 
     # ---- 每日持仓（含市值占比）----
-    pos = pd.read_csv(BASE / "results" / "positions_history.csv",
+    pos = pd.read_csv(base / "results" / "positions_history.csv",
                       dtype={"code": str}, encoding="utf-8-sig")
     pos["code"] = pos["code"].str.strip().str.zfill(6)
     pos["date"] = pos["date"].astype(str)
@@ -120,14 +124,14 @@ def main():
         positions[d] = rows
 
     # ---- 大盘 N20/N5 状态 ----
-    st = pd.read_csv(BASE / "data" / "composite_n20n5_states.csv", encoding="utf-8-sig")
+    st = pd.read_csv(base / "data" / "composite_n20n5_states.csv", encoding="utf-8-sig")
     market_state = {
         str(r.date): [r.combined, r.N20_state, r.N5_state, round(r.target_ratio, 4)]
         for r in st.itertuples()
     }
 
     # ---- 减仓记录 ----
-    red = pd.read_csv(BASE / "results" / "reduction_records.csv", encoding="utf-8-sig")
+    red = pd.read_csv(base / "results" / "reduction_records.csv", encoding="utf-8-sig")
     red = red[(red["sell_value"] > 0) | (red["blocked_value"] > 0)]
     reductions = [
         [str(r.date), round(r.reduction_ratio, 4), round(r.sell_value, 0), round(r.blocked_value, 0)]
@@ -136,7 +140,7 @@ def main():
 
     # ---- 近期完整信号（precompute JSON）----
     signals = {}
-    for f in sorted((BASE / "results" / "precompute").glob("*_precompute.json")):
+    for f in sorted((base / "results" / "precompute").glob("*_precompute.json")):
         d = f.name.split("_")[0]
         try:
             j = json.loads(f.read_text(encoding="utf-8"))
@@ -181,13 +185,15 @@ def main():
         "reductions": reductions,
         "signals": signals,
     }
-    OUT.write_text(
+    out.write_text(
         "window.STRATEGY_DATA = " + json.dumps(data, ensure_ascii=False, separators=(",", ":")) + ";\n",
         encoding="utf-8",
     )
-    print(f"OK -> {OUT}  ({OUT.stat().st_size/1024:.0f} KB)")
+    print(f"OK -> {out}  ({out.stat().st_size/1024:.0f} KB)")
     print(f"净值 {len(nav_series)} 天 | 持仓日期 {len(positions)} | 状态 {len(market_state)} | 减仓 {len(reductions)} | 信号 {len(signals)}")
 
 
 if __name__ == "__main__":
-    main()
+    for base_rel, page_dir in STRATEGIES:
+        print(f"=== {page_dir} <- {base_rel}")
+        build(ROOT / base_rel, HERE / page_dir / "data.js")
