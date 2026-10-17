@@ -197,3 +197,6 @@ if __name__ == "__main__":
     for base_rel, page_dir in STRATEGIES:
         print(f"=== {page_dir} <- {base_rel}")
         build(ROOT / base_rel, HERE / page_dir / "data.js")
+    # 风险平价1.0：独立构建脚本（含 RP 底座/池借款专属数据块）
+    import build_rp1_data
+    build_rp1_data.main()
