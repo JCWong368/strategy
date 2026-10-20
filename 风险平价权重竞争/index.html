@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>风险平价权重竞争 策略展示</title>
+<script src="echarts.min.js"></script>
+<script src="data.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f4f6fa; color: #2b3445; padding: 16px; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .sub { color: #8492a6; font-size: 12px; margin-bottom: 14px; }
+  .cards { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+  .card { background: #fff; border-radius: 10px; padding: 16px 26px; box-shadow: 0 1px 3px rgba(0,0,0,.08); min-width: 170px; }
+  .card .k { font-size: 14px; color: #8492a6; }
+  .card .v { font-size: 28px; font-weight: 700; margin-top: 4px; }
+  .panel { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 14px; margin-bottom: 14px; }
+  .panel h2 { font-size: 15px; margin-bottom: 10px; color: #33415c; }
+  .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .toolbar button { padding: 4px 12px; border: 1px solid #d0d7e2; background: #fff; border-radius: 5px; cursor: pointer; font-size: 13px; }
+  .toolbar button:hover { background: #eef2f8; }
+  .toolbar input[type=date] { padding: 4px 8px; border: 1px solid #d0d7e2; border-radius: 5px; font-size: 13px; }
+  .toolbar label { font-size: 13px; color: #5a6a85; user-select: none; cursor: pointer; }
+  #chart_nav { width: 100%; height: 460px; }
+  #chart_w { width: 100%; height: 280px; }
+  #chart_hp { width: 100%; height: 300px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 1100px) { .grid2 { grid-template-columns: 1fr; } }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { border-bottom: 1px solid #edf0f5; padding: 6px 8px; text-align: right; }
+  th { color: #8492a6; font-weight: 500; background: #fafbfc; }
+  td.l, th.l { text-align: left; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; background: #eef2f8; margin-right: 4px; }
+  .state-big { font-size: 26px; font-weight: 700; }
+  .kv { font-size: 13px; line-height: 1.9; }
+  .kv b { color: #5a6a85; font-weight: 500; margin-right: 6px; }
+  .pos { color: #d63031; } .neg { color: #00b26a; }
+  .none-tip { color: #a0aab8; font-size: 13px; padding: 8px 0; }
+  .wbar { display: flex; height: 18px; border-radius: 4px; overflow: hidden; margin: 6px 0 10px; }
+  .wbar div { height: 100%; }
+  .wlegend { font-size: 12px; color: #5a6a85; display: flex; flex-wrap: wrap; gap: 10px; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+  details.year-block { margin: 6px 0; border: 1px solid #edf0f5; border-radius: 6px; padding: 8px 10px; }
+  details.year-block summary { cursor: pointer; font-size: 13px; color: #33415c; user-select: none; }
+  details.year-block table { margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<h1>风险平价权重竞争 <span style="font-size:13px;color:#8492a6;font-weight:400">四腿 RP 权重竞价 bid=w_RP×p · water-filling 封顶 · T 收盘信号 → T+1 开盘成交</span></h1>
+<div class="sub" id="range"></div>
+
+<div class="cards" id="metrics"></div>
+
+<div class="panel">
+  <h2>净值 / 回撤（滚轮缩放，点击曲线可切换下方日期）</h2>
+  <div class="toolbar">
+    <label><input type="checkbox" id="logscale"> 对数坐标</label>
+    <label><input type="checkbox" id="showred"> 标注季度重估日</label>
+  </div>
+  <div id="chart_nav"></div>
+</div>
+
+<div class="panel">
+  <h2>月度绩效（分年，点击展开）</h2>
+  <div id="monthly"></div>
+</div>
+
+<div class="panel">
+  <h2>持有期收益分布（任意交易日买入并持有 6 / 12 个月）</h2>
+  <div id="hp_stats"></div>
+  <div id="chart_hp"></div>
+</div>
+
+<div class="panel">
+  <h2>四腿仓位 + 现金（堆叠，竞价分配）</h2>
+  <div id="chart_w"></div>
+</div>
+
+<div class="panel">
+  <h2>指定日期详情</h2>
+  <div class="toolbar">
+    <button id="prev">← 前一交易日</button>
+    <input type="date" id="datepick">
+    <button id="next">后一交易日 →</button>
+    <span class="sub" id="curtip" style="margin:0"></span>
+  </div>
+  <div class="grid2">
+    <div>
+      <h2>信号 / RP 竞价权重与 bid（回测可重建）</h2>
+      <div id="signal"></div>
+    </div>
+    <div>
+      <h2>当日生效持仓（回测，占总资产比例）</h2>
+      <div id="holdings"></div>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>最新实际生效的 precompute（次日持仓）</h2>
+  <div class="kv" style="color:#8492a6;font-size:12px;margin-bottom:8px">
+    规则：每个 A 股交易日北京时间 06:00 定时计算——T=前一交易日收盘数据 +
+    今晨欧美收盘数据，生成当日（T+1）开盘前调仓目标；T 日 23:00 由人工提供富易
+    持仓导出，缺失不出单；非交易日不更新。本面板只展示 T+1 ≤ 今天的
+    实际生效结果，未生效的次日预估不在此展示。
+  </div>
+  <div id="latest_pre"></div>
+</div>
+
+<script>
+const D = window.STRATEGY_DATA;
+const MODULE_DEF = [
+  ["w_a_stock","A股","#5470c6"], ["w_hk","港股","#91cc75"], ["w_global","全球","#ee6666"],
+  ["w_commodity","商品","#fac858"], ["w_cash","现金","#c0c8d4"],
+];
+const dates = [...new Set([...D.nav.map(r => r[0]), ...Object.keys(D.signals)])].sort();
+const wMap = {}; D.weights.forEach(r => wMap[r[0]] = r);
+const navMap = {}; D.nav.forEach(r => navMap[r[0]] = r);
+const pct = (x, d=1) => (x*100).toFixed(d) + "%";
+
+// ---------- 指标卡 ----------
+(function(){
+  const m = D.metrics;
+  document.getElementById("range").textContent =
+    `回测区间 ${m.start} ~ ${m.end}（${m.days} 个交易日）｜数据生成于 ${new Date().toLocaleString("zh-CN")}`;
+  const items = [
+    ["累计收益", pct(m.total_return), m.total_return>=0?"pos":"neg"],
+    ["年化收益", pct(m.annual_return), m.annual_return>=0?"pos":"neg"],
+    ["最大回撤", pct(m.max_drawdown), "neg"],
+    ["夏普比率", m.sharpe, ""],
+    ["卡玛比率", m.calmar ?? "-", ""],
+    ["年化波动", pct(m.annual_vol), ""],
+    ["日胜率", pct(m.win_rate), ""],
+    ["累计费用(净值)", pct(m.total_cost, 2), ""],
+  ];
+  document.getElementById("metrics").innerHTML = items.map(([k,v,c]) =>
+    `<div class="card"><div class="k">${k}</div><div class="v ${c}">${v}</div></div>`).join("");
+})();
+
+// ---------- 净值 + 回撤图 ----------
+const navChart = echarts.init(document.getElementById("chart_nav"));
+function navOption(){
+  const log = document.getElementById("logscale").checked;
+  const showRed = document.getElementById("showred").checked;
+  return {
+    animation: false,
+    tooltip: { trigger: "axis", axisPointer: { type: "cross" },
+      formatter: ps => {
+        const d = ps[0].axisValue;
+        let s = d;
+        ps.forEach(p => {
+          const v = p.seriesName === "回撤" ? pct(p.value[1], 2) : (+p.value[1]).toFixed(4);
+          s += `<br>${p.marker}${p.seriesName}: <b>${v}</b>`;
+        });
+        return s;
+      }},
+    axisPointer: { link: [{ xAxisIndex: "all" }] },
+    grid: [
+      { left: 60, right: 20, top: 30, height: "56%" },
+      { left: 60, right: 20, top: "70%", height: "14%" },
+    ],
+    xAxis: [
+      { type: "time", gridIndex: 0 },
+      { type: "time", gridIndex: 1, show: false },
+    ],
+    yAxis: [
+      { type: log ? "log" : "value", scale: true, gridIndex: 0, name: "净值" },
+      { type: "value", gridIndex: 1, max: 0, axisLabel: { formatter: v => (v*100).toFixed(0)+"%" } },
+    ],
+    dataZoom: [
+      { type: "inside", xAxisIndex: [0,1] },
+      { type: "slider", xAxisIndex: [0,1], bottom: 6, height: 22 },
+    ],
+    series: [
+      { name: "净值", type: "line", xAxisIndex: 0, yAxisIndex: 0, showSymbol: false,
+        data: D.nav.map(r => [r[0], r[1]]), lineStyle: { width: 1.6 }, color: "#5470c6",
+        markLine: showRed ? {
+          symbol: "none", label: { show: false },
+          lineStyle: { color: "#ee6666", width: 1, type: "dashed", opacity: .5 },
+          data: D.rebal_dates.map(d => ({ xAxis: d })),
+        } : undefined },
+      { name: "回撤", type: "line", xAxisIndex: 1, yAxisIndex: 1, showSymbol: false,
+        data: D.nav.map(r => [r[0], r[3]]), areaStyle: { opacity: .35 },
+        lineStyle: { width: 1 }, color: "#ee6666" },
+    ],
+  };
+}
+navChart.setOption(navOption());
+document.getElementById("logscale").onchange = () => navChart.setOption(navOption(), true);
+document.getElementById("showred").onchange = () => navChart.setOption(navOption(), true);
+navChart.on("click", p => { if (p.value && p.value[0]) setDate(p.value[0]); });
+
+// ---------- 月度绩效（分年，默认折叠）----------
+(function(){
+  const rows = D.nav;   // [date, nav, ret, dd]
+  const byYear = {};
+  rows.forEach(r => {
+    const y = r[0].slice(0, 4), m = r[0].slice(5, 7);
+    (byYear[y] = byYear[y] || {})[m] = r;
+  });
+  const el = document.getElementById("monthly");
+  let h = "";
+  let prevNav = 1.0;   // 跨年连续：上月末净值（首月以净值起点 1.0 为基）
+  Object.keys(byYear).sort().forEach(y => {
+    const months = byYear[y];
+    const mkeys = Object.keys(months).sort();
+    const yearStart = prevNav;
+    const parts = [];
+    mkeys.forEach(m => {
+      const navv = months[m][1];
+      const mr = navv / prevNav - 1;
+      prevNav = navv;
+      parts.push([m, mr, navv]);
+    });
+    const yearRet = prevNav / yearStart - 1;
+    const winRate = parts.filter(p => p[1] > 0).length / parts.length;
+    const rowsHtml = parts.map(([m, mr, navv]) =>
+      `<tr><td class="l">${y}-${m}</td><td class="${mr>=0?'pos':'neg'}">${pct(mr,2)}</td><td>${navv.toFixed(4)}</td></tr>`).join("");
+    h += `<details class="year-block"><summary><b>${y} 年</b>　全年 <span class="${yearRet>=0?'pos':'neg'}">${pct(yearRet,2)}</span>　月胜率 ${pct(winRate,0)}（${parts.length} 个月）</summary>
+      <table><tr><th class="l">月份</th><th>月收益</th><th>月末净值</th></tr>${rowsHtml}</table></details>`;
+  });
+  el.innerHTML = h;
+})();
+
+// ---------- 持有期收益分布 ----------
+(function(){
+  const navs = D.nav.map(r => r[1]);
+  const defs = [["6个月", 126, "#5470c6"], ["12个月", 252, "#91cc75"]];
+  const groups = defs.map(([label, days, color]) => {
+    const rets = [];
+    for (let i = days; i < navs.length; i++) rets.push(navs[i] / navs[i-days] - 1);
+    return { label, color, rets };
+  });
+  const stat = a => {
+    const s = [...a].sort((x, y) => x - y);
+    const med = s.length % 2 ? s[(s.length-1)/2] : (s[s.length/2-1] + s[s.length/2]) / 2;
+    return { n: a.length, mean: a.reduce((x, y) => x + y, 0) / a.length, med,
+             min: s[0], max: s[s.length-1], win: a.filter(x => x > 0).length / a.length };
+  };
+  let st = `<table><tr><th class="l">持有期</th><th>样本数</th><th>均值</th><th>中位数</th><th>最好</th><th>最差</th><th>正收益占比</th></tr>`;
+  groups.forEach(({ label, rets }) => {
+    const t = stat(rets);
+    st += `<tr><td class="l">${label}</td><td>${t.n}</td><td>${pct(t.mean)}</td><td>${pct(t.med)}</td>
+      <td class="pos">${pct(t.max)}</td><td class="neg">${pct(t.min)}</td><td>${pct(t.win)}</td></tr>`;
+  });
+  document.getElementById("hp_stats").innerHTML = st + `</table>`;
+
+  const all = groups.flatMap(g => g.rets);
+  const lo = Math.floor(Math.min(...all) / 0.05) * 0.05;
+  const hi = Math.ceil(Math.max(...all) / 0.05) * 0.05;
+  const bins = [];
+  for (let b = lo; b < hi - 1e-9; b += 0.05) bins.push([b, b + 0.05]);
+  const binLabels = bins.map(([a]) => (a * 100).toFixed(0) + "%");
+  const hpChart = echarts.init(document.getElementById("chart_hp"));
+  hpChart.setOption({
+    animation: false,
+    tooltip: { trigger: "axis" },
+    legend: { top: 0 },
+    grid: { left: 50, right: 20, top: 30, bottom: 30 },
+    xAxis: { type: "category", data: binLabels, name: "持有期收益" },
+    yAxis: { type: "value", name: "次数" },
+    series: groups.map(({ label, color, rets }) => ({
+      name: label, type: "bar", color, barGap: "10%",
+      data: bins.map(([a, b]) => rets.filter(r => r >= a && r < b).length),
+    })),
+  });
+  window.addEventListener("resize", () => hpChart.resize());
+})();
+
+// ---------- 四袖仓位堆叠图 ----------
+const wChart = echarts.init(document.getElementById("chart_w"));
+wChart.setOption({
+  animation: false,
+  tooltip: { trigger: "axis", valueFormatter: v => (v*100).toFixed(1)+"%" },
+  legend: { top: 0 },
+  grid: { left: 50, right: 20, top: 30, bottom: 40 },
+  xAxis: { type: "time" },
+  yAxis: { type: "value", max: v => Math.min(1, Math.ceil(v.max*10)/10), axisLabel: { formatter: v => (v*100).toFixed(0)+"%" } },
+  dataZoom: [ { type: "inside" }, { type: "slider", bottom: 6, height: 20 } ],
+  series: MODULE_DEF.map(([key, name, color], i) => ({
+    name, type: "line", stack: "w", showSymbol: false, color,
+    areaStyle: { opacity: .8 }, lineStyle: { width: .5 },
+    emphasis: { focus: "series" },
+    data: D.weights.map(r => [r[0], r[i+1]]),
+  })),
+});
+
+// ---------- 日期详情 ----------
+let curIdx = nearestIdx(D.metrics.end);   // 默认最后回测日；最新 precompute 在下方独立面板
+const pick = document.getElementById("datepick");
+
+function nearestIdx(dstr){
+  let lo = 0, hi = dates.length - 1, ans = hi;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (dates[mid] <= dstr) { ans = mid; lo = mid + 1; } else hi = mid - 1;
+  }
+  return ans;
+}
+function setDate(dstr){ curIdx = nearestIdx(dstr); renderDetail(); }
+document.getElementById("prev").onclick = () => { if (curIdx > 0) { curIdx--; renderDetail(); } };
+document.getElementById("next").onclick = () => { if (curIdx < dates.length - 1) { curIdx++; renderDetail(); } };
+pick.onchange = () => setDate(pick.value);
+
+function weightBar(w){
+  const parts = MODULE_DEF.map(([key, name, color], i) => ({ name, color, v: w[i+1] || 0 }));
+  const total = parts.reduce((s, p) => s + p.v, 0) || 1;
+  const bar = parts.filter(p => p.v > 0.0005).map(p =>
+    `<div style="width:${(p.v/total*100).toFixed(2)}%;background:${p.color}" title="${p.name} ${pct(p.v)}"></div>`).join("");
+  const legend = parts.map(p =>
+    `<span><span class="dot" style="background:${p.color}"></span>${p.name} ${pct(p.v)}</span>`).join("");
+  return `<div class="wbar">${bar}</div><div class="wlegend">${legend}</div>`;
+}
+function borrowTags(b){
+  const names = ["A股", "港股", "全球", "商品"];
+  return names.map((n, i) => `<span class="tag">${n} ${pct(b[i], 2)}</span>`).join("");
+}
+
+function renderDetail(){
+  const d = dates[curIdx];
+  pick.value = d;
+  document.getElementById("curtip").textContent = `第 ${curIdx+1}/${dates.length} 个交易日`;
+  const navRow = navMap[d] || null;
+  const w = wMap[d] || [];
+  const rp = D.rp_daily[d];
+
+  // ---- 信号区 ----
+  let h = "";
+  if (navRow) {
+    h += `<div class="kv"><b>净值</b>${navRow[1].toFixed(4)}　<b>日收益</b><span class="${navRow[2]>=0?'pos':'neg'}">${pct(navRow[2],2)}</span>　<b>回撤</b>${pct(navRow[3],2)}</div>`;
+    h += `<div class="kv" style="margin-top:6px"><b>四腿仓位（竞价分配）</b></div>` + weightBar(w);
+  } else {
+    h += `<div class="kv"><b>precompute 数据日</b>（回测窗口 ${D.metrics.end} 之后，仅 precompute 落盘数据）</div>`;
+  }
+  if (rp) {
+    h += `<div class="kv"><b>袖仓位系数 p_i</b>（袖自身择时仓位，未乘竞价权重）<span class="tag">A股 ${rp.p[0]==null?'-':pct(rp.p[0])}</span><span class="tag">港股 ${rp.p[1]==null?'-':pct(rp.p[1])}</span><span class="tag">全球 ${rp.p[2]==null?'-':pct(rp.p[2])}</span><span class="tag">商品 ${rp.p[3]==null?'-':pct(rp.p[3])}</span></div>`;
+    h += `<div class="kv" style="margin-top:6px"><b>RP 竞价权重 w_rp</b>（季度重估 + 5pp 缓冲带）</div>`
+      + weightBar(["d", rp.w[0], rp.w[1], rp.w[2], rp.w[3], 0]);
+    h += `<div class="kv"><b>竞价 bid = w_rp×p</b>${borrowTags(rp.bid)}</div>`;
+  }
+  document.getElementById("signal").innerHTML = h;
+
+  // ---- 持仓区（只显示占总资产比例）----
+  const adet = D.a_stock_detail[d] || [];
+  document.getElementById("holdings").innerHTML =
+    holdTable(D.positions[d] || [], "当日生效持仓（回测）")
+    + (adet.length
+       ? holdTable(adet, "A股袖持仓明细（袖内权重，不含择时系数缩放）", "袖内权重")
+       : "");
+}
+
+// ---------- 持仓表（两个面板共用）----
+function holdTable(list, title, colName){
+  if (!list || !list.length) return `<div class="none-tip">${title}：无数据（空仓或该日期未落盘）。</div>`;
+  const sum = list.reduce((s, x) => s + (x[2] || 0), 0);
+  const cn = colName || "占总资产";
+  const rows = list.map(([c, , p], i) =>
+    `<tr><td>${i+1}</td><td class="l">${c}</td><td class="l">${D.names[c]||""}</td><td>${p == null ? "-" : pct(p)}</td></tr>`).join("");
+  return `<div class="kv" style="margin:8px 0 4px"><b>${title}</b>（${list.length} 只，合计 ${pct(sum)}）</div>
+    <table><tr><th>#</th><th class="l">代码</th><th class="l">名称</th><th>${cn}</th></tr>${rows}</table>`;
+}
+
+// ---------- 最新实际生效的 precompute 次日持仓（仅 T+1 ≤ 今天的结果）----
+function renderLatestPre(){
+  const el = document.getElementById("latest_pre");
+  const today = new Date().toLocaleDateString('sv-SE');   // 本地 YYYY-MM-DD
+  // 只取已实际生效的 precompute（T+1 ≤ 今天）；未生效的次日预估不展示
+  const keys = Object.keys(D.signals)
+    .filter(k => (D.signals[k].t1_date || '9999-12-31') <= today).sort();
+  if (!keys.length) {
+    el.innerHTML = `<div class="none-tip">暂无已生效的 precompute 落盘数据。</div>`;
+    return;
+  }
+  const d = keys[keys.length - 1];
+  const sig = D.signals[d];
+  let h = `<div class="kv"><b>数据日 T</b>${d}　<b>目标生效日 T+1</b>${sig.t1_date}</div>`;
+  if (sig.rpc_info) {
+    const info = sig.rpc_info;
+    h += `<div class="kv"><b>p_i</b><span class="tag">A股 ${pct(info.p.p_a)}</span><span class="tag">港股 ${pct(info.p.p_hk)}</span><span class="tag">全球 ${pct(info.p.p_gl)}</span><span class="tag">商品 ${pct(info.p.p_cmd)}</span></div>`;
+    h += `<div class="kv"><b>RP 竞价权重（daily_eff 截至 ${info.rp_weights_asof}）</b></div>`
+      + weightBar(["d", info.w_rp.ashare, info.w_rp.hk, info.w_rp.global, info.w_rp.cmdty, 0]);
+    h += `<div class="kv"><b>竞价 bid = w_rp×p</b>${borrowTags([info.bid.ashare, info.bid.hk, info.bid.global, info.bid.cmdty])}</div>`;
+    if (info.cap_triggered && info.cap_triggered.length) {
+      h += `<div class="kv"><b>cap 触发</b>${info.cap_triggered.map(c => `<span class="tag">${c}</span>`).join("")}</div>`;
+    }
+  }
+  if (sig.weights_t1) {
+    h += `<div class="kv"><b>T+1 目标仓位</b></div>` + weightBar(["d", ...MODULE_DEF.map(k => sig.weights_t1[k[0]] ?? 0)]);
+  }
+  h += holdTable(sig.t1_holdings || [], "T+1 目标持仓");
+  el.innerHTML = h;
+}
+
+renderDetail();
+renderLatestPre();
+
+window.addEventListener("resize", () => { navChart.resize(); wChart.resize(); });
+</script>
+</body>
+</html>

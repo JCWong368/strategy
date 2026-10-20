@@ -200,3 +200,6 @@ if __name__ == "__main__":
     # 风险平价1.0：独立构建脚本（含 RP 底座/池借款专属数据块）
     import build_rp1_data
     build_rp1_data.main()
+    # 风险平价权重竞争：独立构建脚本（含 RP 竞价权重/bid 专属数据块）
+    import build_rpc_data
+    build_rpc_data.main()
