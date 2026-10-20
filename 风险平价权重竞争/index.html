@@ -317,6 +317,21 @@ function borrowTags(b){
   const names = ["A股", "港股", "全球", "商品"];
   return names.map((n, i) => `<span class="tag">${n} ${pct(b[i], 2)}</span>`).join("");
 }
+// 四腿各自的仓位系数（单独成条展示，各自满格为 100%，不做堆叠归一）
+function legCoefBars(vals){
+  const names = ["A股", "港股", "全球", "商品"];
+  const colors = ["#5470c6", "#91cc75", "#ee6666", "#fac858"];
+  return names.map((n, i) => {
+    const v = vals[i];
+    const txt = v == null ? "-" : pct(v);
+    const w = v == null ? 0 : Math.min(1, Math.max(0, v)) * 100;
+    return `<div style="display:flex;align-items:center;gap:8px;margin:3px 0">
+      <span style="width:34px;font-size:12px;color:#5a6a85">${n}</span>
+      <div style="flex:1;background:#eef2f8;border-radius:4px;height:14px;overflow:hidden">
+        <div style="width:${w.toFixed(2)}%;background:${colors[i]};height:100%"></div></div>
+      <span style="width:56px;font-size:12px;text-align:right">${txt}</span></div>`;
+  }).join("");
+}
 
 function renderDetail(){
   const d = dates[curIdx];
@@ -330,15 +345,18 @@ function renderDetail(){
   let h = "";
   if (navRow) {
     h += `<div class="kv"><b>净值</b>${navRow[1].toFixed(4)}　<b>日收益</b><span class="${navRow[2]>=0?'pos':'neg'}">${pct(navRow[2],2)}</span>　<b>回撤</b>${pct(navRow[3],2)}</div>`;
-    h += `<div class="kv" style="margin-top:6px"><b>四腿仓位（竞价分配）</b></div>` + weightBar(w);
   } else {
     h += `<div class="kv"><b>precompute 数据日</b>（回测窗口 ${D.metrics.end} 之后，仅 precompute 落盘数据）</div>`;
   }
   if (rp) {
-    h += `<div class="kv"><b>袖仓位系数 p_i</b>（袖自身择时仓位，未乘竞价权重）<span class="tag">A股 ${rp.p[0]==null?'-':pct(rp.p[0])}</span><span class="tag">港股 ${rp.p[1]==null?'-':pct(rp.p[1])}</span><span class="tag">全球 ${rp.p[2]==null?'-':pct(rp.p[2])}</span><span class="tag">商品 ${rp.p[3]==null?'-':pct(rp.p[3])}</span></div>`;
+    h += `<div class="kv" style="margin-top:6px"><b>四腿仓位系数 p_i</b>（各腿自身择时信号，单独展示）</div>`
+      + legCoefBars(rp.p);
     h += `<div class="kv" style="margin-top:6px"><b>RP 竞价权重 w_rp</b>（季度重估 + 5pp 缓冲带）</div>`
       + weightBar(["d", rp.w[0], rp.w[1], rp.w[2], rp.w[3], 0]);
     h += `<div class="kv"><b>竞价 bid = w_rp×p</b>${borrowTags(rp.bid)}</div>`;
+  }
+  if (navRow) {
+    h += `<div class="kv" style="margin-top:6px"><b>组合实际仓位</b>（竞价分配后，含现金）</div>` + weightBar(w);
   }
   document.getElementById("signal").innerHTML = h;
 
