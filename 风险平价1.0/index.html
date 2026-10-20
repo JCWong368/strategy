@@ -91,7 +91,13 @@
 </div>
 
 <div class="panel">
-  <h2>最新 precompute 次日持仓（仅最后数据日）</h2>
+  <h2>最新实际生效的 precompute（次日持仓）</h2>
+  <div class="kv" style="color:#8492a6;font-size:12px;margin-bottom:8px">
+    规则：每个 A 股交易日北京时间 06:00 定时计算——T=前一交易日收盘数据 +
+    今晨欧美收盘数据，生成当日（T+1）开盘前调仓目标；T 日 23:00 由人工提供富易
+    持仓导出，缺失不出单；非交易日不更新。本面板只展示 T+1 ≤ 今天的
+    实际生效结果，未生效的次日预估不在此展示。
+  </div>
   <div id="latest_pre"></div>
 </div>
 
@@ -312,12 +318,15 @@ function holdTable(list, title){
     <table><tr><th>#</th><th class="l">代码</th><th class="l">名称</th><th>占总资产</th></tr>${rows}</table>`;
 }
 
-// ---------- 最新 precompute 次日持仓（仅最后数据日）----
+// ---------- 最新实际生效的 precompute 次日持仓（仅 T+1 ≤ 今天的结果）----
 function renderLatestPre(){
-  const keys = Object.keys(D.signals).sort();
   const el = document.getElementById("latest_pre");
+  const today = new Date().toLocaleDateString('sv-SE');   // 本地 YYYY-MM-DD
+  // 只取已实际生效的 precompute（T+1 ≤ 今天）；未生效的次日预估不展示
+  const keys = Object.keys(D.signals)
+    .filter(k => (D.signals[k].t1_date || '9999-12-31') <= today).sort();
   if (!keys.length) {
-    el.innerHTML = `<div class="none-tip">暂无 precompute 落盘数据。</div>`;
+    el.innerHTML = `<div class="none-tip">暂无已生效的 precompute 落盘数据。</div>`;
     return;
   }
   const d = keys[keys.length - 1];
