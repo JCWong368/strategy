@@ -41,6 +41,9 @@
   .wbar div { height: 100%; }
   .wlegend { font-size: 12px; color: #5a6a85; display: flex; flex-wrap: wrap; gap: 10px; }
   .dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+  details.year-block { margin: 6px 0; border: 1px solid #edf0f5; border-radius: 6px; padding: 8px 10px; }
+  details.year-block summary { cursor: pointer; font-size: 13px; color: #33415c; user-select: none; }
+  details.year-block table { margin-top: 8px; }
 </style>
 </head>
 <body>
@@ -57,6 +60,11 @@
     <label><input type="checkbox" id="showred"> 标注季度重估日</label>
   </div>
   <div id="chart_nav"></div>
+</div>
+
+<div class="panel">
+  <h2>月度绩效（分年，点击展开）</h2>
+  <div id="monthly"></div>
 </div>
 
 <div class="panel">
@@ -184,6 +192,38 @@ document.getElementById("logscale").onchange = () => navChart.setOption(navOptio
 document.getElementById("showred").onchange = () => navChart.setOption(navOption(), true);
 navChart.on("click", p => { if (p.value && p.value[0]) setDate(p.value[0]); });
 
+// ---------- 月度绩效（分年，默认折叠）----------
+(function(){
+  const rows = D.nav;   // [date, nav, ret, dd]
+  const byYear = {};
+  rows.forEach(r => {
+    const y = r[0].slice(0, 4), m = r[0].slice(5, 7);
+    (byYear[y] = byYear[y] || {})[m] = r;
+  });
+  const el = document.getElementById("monthly");
+  let h = "";
+  let prevNav = 1.0;   // 跨年连续：上月末净值（首月以净值起点 1.0 为基）
+  Object.keys(byYear).sort().forEach(y => {
+    const months = byYear[y];
+    const mkeys = Object.keys(months).sort();
+    const yearStart = prevNav;
+    const parts = [];
+    mkeys.forEach(m => {
+      const navv = months[m][1];
+      const mr = navv / prevNav - 1;
+      prevNav = navv;
+      parts.push([m, mr, navv]);
+    });
+    const yearRet = prevNav / yearStart - 1;
+    const winRate = parts.filter(p => p[1] > 0).length / parts.length;
+    const rowsHtml = parts.map(([m, mr, navv]) =>
+      `<tr><td class="l">${y}-${m}</td><td class="${mr>=0?'pos':'neg'}">${pct(mr,2)}</td><td>${navv.toFixed(4)}</td></tr>`).join("");
+    h += `<details class="year-block"><summary><b>${y} 年</b>　全年 <span class="${yearRet>=0?'pos':'neg'}">${pct(yearRet,2)}</span>　月胜率 ${pct(winRate,0)}（${parts.length} 个月）</summary>
+      <table><tr><th class="l">月份</th><th>月收益</th><th>月末净值</th></tr>${rowsHtml}</table></details>`;
+  });
+  el.innerHTML = h;
+})();
+
 // ---------- 持有期收益分布 ----------
 (function(){
   const navs = D.nav.map(r => r[1]);
@@ -295,6 +335,7 @@ function renderDetail(){
     h += `<div class="kv"><b>precompute 数据日</b>（回测窗口 ${D.metrics.end} 之后，仅 precompute 落盘数据）</div>`;
   }
   if (rp) {
+    h += `<div class="kv"><b>袖仓位系数 p_i</b>（袖自身择时仓位，未乘底座权重）<span class="tag">A股 ${pct(rp.p[0])}</span><span class="tag">港股 ${pct(rp.p[1])}</span><span class="tag">全球 ${pct(rp.p[2])}</span><span class="tag">商品 ${pct(rp.p[3])}</span></div>`;
     h += `<div class="kv" style="margin-top:6px"><b>RP 底座生效权重 w_eff</b></div>`
       + weightBar(["d", rp.w[0], rp.w[1], rp.w[2], rp.w[3], 0]);
     h += `<div class="kv"><b>池借款 borrow</b>${borrowTags(rp.borrow)}</div>`;
@@ -304,18 +345,23 @@ function renderDetail(){
   document.getElementById("signal").innerHTML = h;
 
   // ---- 持仓区（只显示占总资产比例）----
+  const adet = D.a_stock_detail[d] || [];
   document.getElementById("holdings").innerHTML =
-    holdTable(D.positions[d] || [], "当日生效持仓（回测）");
+    holdTable(D.positions[d] || [], "当日生效持仓（回测）")
+    + (adet.length
+       ? holdTable(adet, "A股袖持仓明细（袖内权重，不含择时系数缩放）", "袖内权重")
+       : "");
 }
 
 // ---------- 持仓表（两个面板共用）----
-function holdTable(list, title){
+function holdTable(list, title, colName){
   if (!list || !list.length) return `<div class="none-tip">${title}：无数据（空仓或该日期未落盘）。</div>`;
   const sum = list.reduce((s, x) => s + (x[2] || 0), 0);
+  const cn = colName || "占总资产";
   const rows = list.map(([c, , p], i) =>
     `<tr><td>${i+1}</td><td class="l">${c}</td><td class="l">${D.names[c]||""}</td><td>${p == null ? "-" : pct(p)}</td></tr>`).join("");
   return `<div class="kv" style="margin:8px 0 4px"><b>${title}</b>（${list.length} 只，合计 ${pct(sum)}）</div>
-    <table><tr><th>#</th><th class="l">代码</th><th class="l">名称</th><th>占总资产</th></tr>${rows}</table>`;
+    <table><tr><th>#</th><th class="l">代码</th><th class="l">名称</th><th>${cn}</th></tr>${rows}</table>`;
 }
 
 // ---------- 最新实际生效的 precompute 次日持仓（仅 T+1 ≤ 今天的结果）----

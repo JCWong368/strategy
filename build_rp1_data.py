@@ -56,7 +56,8 @@ def load_names() -> dict:
 
 
 def build_positions(nav: pd.DataFrame, close_tab: pd.DataFrame) -> tuple:
-    """每日 ETF 持仓（组合层权重）。返回 (positions, max_dev)。"""
+    """每日 ETF 持仓（组合层权重）+ A股袖内权重明细（不含择时缩放）。
+    返回 (positions, a_detail, max_dev)。"""
     nav = nav.copy()
     nav['date'] = nav['date'].astype(str)
     pos_a = nav.set_index('date')['pos_a']
@@ -84,6 +85,7 @@ def build_positions(nav: pd.DataFrame, close_tab: pd.DataFrame) -> tuple:
     cmd_w = cmd.set_index('date')[[f'{c}_weight' for c in CMD_CODES]]
 
     positions = {}
+    a_detail = {}
     max_dev = 0.0
     a_by_date = {d: g for d, g in a_pos.groupby('date')}
     hk_by_date = {d: g for d, g in hk_pos.groupby('date')}
@@ -99,7 +101,7 @@ def build_positions(nav: pd.DataFrame, close_tab: pd.DataFrame) -> tuple:
                 rows.append([code, 0, round(float(w), 6)])
 
         pa, phk, pgl, pcmd = r['pos_a'], r['pos_hk'], r['pos_gl'], r['pos_cmd']
-        if pa > 1e-12 and d in a_by_date:
+        if d in a_by_date:
             g = a_by_date[d]
             mvs = []
             for rr in g.itertuples():
@@ -110,8 +112,13 @@ def build_positions(nav: pd.DataFrame, close_tab: pd.DataFrame) -> tuple:
                 mvs.append((rr.code, rr.qty * price))
             s = sum(v for _, v in mvs if pd.notna(v))
             if s > 0:
-                for code, v in mvs:
-                    add(code, pa * v / s)
+                # 袖内权重明细（不含择时缩放，与 pa 无关）
+                a_detail[d] = [[code, 0, round(v / s, 6)]
+                               for code, v in sorted(mvs, key=lambda x: -x[1])
+                               if pd.notna(v) and v > 0]
+                if pa > 1e-12:
+                    for code, v in mvs:
+                        add(code, pa * v / s)
         if phk > 1e-12 and d in hk_by_date:
             qty = {}
             for rr in hk_by_date[d].itertuples():
@@ -141,7 +148,7 @@ def build_positions(nav: pd.DataFrame, close_tab: pd.DataFrame) -> tuple:
         total = pa + phk + pgl + pcmd
         dev = abs(raw_sum - total)
         max_dev = max(max_dev, dev)
-    return positions, max_dev
+    return positions, a_detail, max_dev
 
 
 def build_rp_daily(nav: pd.DataFrame):
@@ -163,6 +170,7 @@ def build_rp_daily(nav: pd.DataFrame):
     for i, d in enumerate(dates):
         rp_daily[d] = {
             'w': [round(float(w[s][i]), 6) for s in core.SLEEVES],
+            'p': [round(float(p[s][i]), 6) for s in core.SLEEVES],
             'borrow': [round(float(pool['borrow'][s][i]), 6) for s in core.SLEEVES],
             'S': round(float(pool['S'][i]), 6),
             'D': round(float(pool['D'][i]), 6),
@@ -264,7 +272,7 @@ def main():
         index='date', columns='code', values='close')
     close_tab = close_tab.reindex(sorted(set(close_tab.index) | set(nav_dates))).ffill()
 
-    positions, max_dev = build_positions(nav, close_tab)
+    positions, a_detail, max_dev = build_positions(nav, close_tab)
     print(f'[自校验] 每日 ETF 权重合计 vs Σpos：最大偏差 {max_dev:.3e}'
           + ('（>1e-6，请检查）' if max_dev > 1e-6 else ' ✓'))
 
@@ -274,7 +282,7 @@ def main():
     data = {
         'names': names, 'metrics': metrics, 'nav': nav_series,
         'weights': weight_series, 'benchmarks': benchmarks,
-        'positions': positions, 'rp_daily': rp_daily,
+        'positions': positions, 'a_stock_detail': a_detail, 'rp_daily': rp_daily,
         'rebal_dates': rebal_dates, 'signals': signals,
     }
     OUT.parent.mkdir(parents=True, exist_ok=True)
