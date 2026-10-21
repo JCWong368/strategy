@@ -373,11 +373,13 @@ function renderDetail(){
 
   // ---- 持仓区（只显示占总资产比例）----
   const adet = D.a_stock_detail[d] || [];
-  document.getElementById("holdings").innerHTML =
-    holdTable(D.positions[d] || [], "当日生效持仓（回测）")
-    + (adet.length
-       ? holdTable(adet, "A股袖持仓明细（袖内权重，不含择时系数缩放）", "袖内权重")
-       : "");
+  let detailHtml = holdTable(D.positions[d] || [], "当日生效持仓（回测）");
+  if (adet.length) {
+    const asum = adet.reduce((s, x) => s + (x[2] || 0), 0);
+    detailHtml += `<details class="year-block"><summary><b>A股袖选股底仓（不含择时，袖内权重）</b>　${adet.length} 只，合计 ${pct(asum)}（点击展开）</summary>`
+      + holdTable(adet, "选股底仓明细", "袖内权重") + `</details>`;
+  }
+  document.getElementById("holdings").innerHTML = detailHtml;
 }
 
 // ---------- 持仓表（两个面板共用）----
