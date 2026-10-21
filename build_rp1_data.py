@@ -65,12 +65,17 @@ def build_positions(nav: pd.DataFrame, close_tab: pd.DataFrame) -> tuple:
     pos_gl = nav.set_index('date')['pos_gl']
     pos_cmd = nav.set_index('date')['pos_cmd']
 
-    # A股：08_九格 positions_history（qty × close 市值归一 × pos_a）
+    # A股：组合层行用 08_九格 positions_history × pos_a；选股底仓（a_detail）
+    # 用行业轮动 slot 持仓——joint9 只缩放整体仓位不改选股，p_a=0 日选股依然可见
     a_pos = pd.read_csv(ROOT / '择时改进探索' / '08_九格系数替代四态_A股子策略'
                         / 'output' / 'positions_history.csv',
                         dtype={'code': str}, encoding='utf-8-sig')
     a_pos['code'] = a_pos['code'].str.strip().str.zfill(6)
     a_pos['date'] = a_pos['date'].astype(str)
+    slot = pd.read_csv(ROOT / '06_行业轮动'
+                       / 'industry7.2.7_global_stoploss_partial_rebuild_4to2'
+                       / 'output' / 'daily_slot_holdings.csv', encoding='utf-8-sig')
+    slot['date'] = pd.to_datetime(slot['date']).dt.strftime('%Y-%m-%d')
 
     # 港股：轮动1.0 daily_slot_holdings（当日全部 slot 合并）
     hk_pos = pd.read_csv(ROOT / '16_港股通' / '港股通轮动1.0' / 'output'
@@ -88,6 +93,7 @@ def build_positions(nav: pd.DataFrame, close_tab: pd.DataFrame) -> tuple:
     a_detail = {}
     max_dev = 0.0
     a_by_date = {d: g for d, g in a_pos.groupby('date')}
+    slot_by_date = {d: g for d, g in slot.groupby('date')}
     hk_by_date = {d: g for d, g in hk_pos.groupby('date')}
     for _, r in nav.iterrows():
         d = r['date']
@@ -101,7 +107,26 @@ def build_positions(nav: pd.DataFrame, close_tab: pd.DataFrame) -> tuple:
                 rows.append([code, 0, round(float(w), 6)])
 
         pa, phk, pgl, pcmd = r['pos_a'], r['pos_hk'], r['pos_gl'], r['pos_cmd']
-        if d in a_by_date:
+        # 选股底仓（行业轮动 slot，与择时仓位无关，p_a=0 日也展示）
+        if d in slot_by_date:
+            qty = {}
+            for rr in slot_by_date[d].itertuples():
+                for k, v in ast.literal_eval(rr.positions).items():
+                    qty[k] = qty.get(k, 0.0) + float(v)
+            mvs = []
+            for code, q in qty.items():
+                try:
+                    price = close_tab.at[d, code]
+                except KeyError:
+                    price = np.nan
+                mvs.append((code, q * price))
+            s = sum(v for _, v in mvs if pd.notna(v))
+            if s > 0:
+                a_detail[d] = [[code, 0, round(v / s, 6)]
+                               for code, v in sorted(mvs, key=lambda x: -x[1])
+                               if pd.notna(v) and v > 0]
+        # 组合层 A股行（引擎实际持仓 × pos_a，p_a=0 时为空）
+        if pa > 1e-12 and d in a_by_date:
             g = a_by_date[d]
             mvs = []
             for rr in g.itertuples():
@@ -112,13 +137,8 @@ def build_positions(nav: pd.DataFrame, close_tab: pd.DataFrame) -> tuple:
                 mvs.append((rr.code, rr.qty * price))
             s = sum(v for _, v in mvs if pd.notna(v))
             if s > 0:
-                # 袖内权重明细（不含择时缩放，与 pa 无关）
-                a_detail[d] = [[code, 0, round(v / s, 6)]
-                               for code, v in sorted(mvs, key=lambda x: -x[1])
-                               if pd.notna(v) and v > 0]
-                if pa > 1e-12:
-                    for code, v in mvs:
-                        add(code, pa * v / s)
+                for code, v in mvs:
+                    add(code, pa * v / s)
         if phk > 1e-12 and d in hk_by_date:
             qty = {}
             for rr in hk_by_date[d].itertuples():
@@ -259,10 +279,16 @@ def main():
                               / 'output' / 'positions_history.csv',
                               dtype={'code': str}, encoding='utf-8-sig',
                               usecols=['code'])['code'].unique()
+    slot_codes = pd.read_csv(ROOT / '06_行业轮动'
+                             / 'industry7.2.7_global_stoploss_partial_rebuild_4to2'
+                             / 'output' / 'daily_slot_holdings.csv',
+                             encoding='utf-8-sig',
+                             usecols=['codes'])['codes'].str.split(',').explode().unique()
     hk_codes = pd.read_csv(ROOT / '16_港股通' / '港股通轮动1.0' / 'output'
                            / 'daily_slot_holdings.csv', encoding='utf-8-sig',
                            usecols=['codes'])['codes'].str.split(',').explode().unique()
-    need_codes = set(a_pos_codes) | set(hk_codes) | set(GL_ETF_INNER) | set(CMD_CODES)
+    need_codes = (set(a_pos_codes) | set(slot_codes) | set(hk_codes)
+                  | set(GL_ETF_INNER) | set(CMD_CODES))
     px = pd.read_csv(ROOT / '03_运行类' / 'etf_prices_long.csv', dtype={'code': str},
                      usecols=['code', 'date', 'close'], encoding='utf-8-sig')
     px['code'] = px['code'].str.strip().str.zfill(6)
@@ -289,6 +315,16 @@ def main():
     OUT.write_text('window.STRATEGY_DATA = '
                    + json.dumps(data, ensure_ascii=False, separators=(',', ':')) + ';\n',
                    encoding='utf-8')
+    # data.js 加构建版本号防浏览器缓存（每日重建后页面总能取到新数据）
+    import re
+    import time
+    html = OUT.parent / 'index.html'
+    if html.exists():
+        s = html.read_text(encoding='utf-8')
+        s2 = re.sub(r'src="data\.js(?:\?v=[^"]*)?"',
+                    f'src="data.js?v={int(time.time())}"', s)
+        if s2 != s:
+            html.write_text(s2, encoding='utf-8')
     print(f'OK -> {OUT}（{OUT.stat().st_size / 1024:.0f} KB）')
     print(f'净值 {n} 天 | 持仓日期 {len(positions)} | RP 日度 {len(rp_daily)} | '
           f'重估日 {len(rebal_dates)} | precompute 信号 {len(signals)}')
