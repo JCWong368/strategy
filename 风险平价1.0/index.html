@@ -340,7 +340,7 @@ function renderDetail(){
   // ---- 信号区 ----
   let h = "";
   if (navRow) {
-    h += `<div class="kv"><b>净值</b>${navRow[1].toFixed(4)}　<b>日收益</b><span class="${navRow[2]>=0?'pos':'neg'}">${pct(navRow[2],2)}</span>　<b>回撤</b>${pct(navRow[3],2)}</div>`;
+    h += `<div class="kv"><b>净值</b>${navRow[1].toFixed(4)}　<b>当日净值变动</b><span class="${navRow[2]>=0?'pos':'neg'}" style="font-size:20px;font-weight:700">${pct(navRow[2],2)}</span>　<b>回撤</b>${pct(navRow[3],2)}</div>`;
     h += `<div class="kv" style="margin-top:6px"><b>四袖仓位（含借款）</b></div>` + weightBar(w);
   } else {
     h += `<div class="kv"><b>precompute 数据日</b>（回测窗口 ${D.metrics.end} 之后，仅 precompute 落盘数据）</div>`;
