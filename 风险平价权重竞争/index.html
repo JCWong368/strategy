@@ -45,6 +45,9 @@
   .topnav a:hover { background: #eef2f8; }
   .topnav a.cur { background: #5470c6; border-color: #5470c6; color: #fff; font-weight: 600; }
   .topnav a.home { color: #5470c6; }
+  .topnav .sep { flex: 1; }
+  .topnav .vlabel { font-size: 12px; color: #8492a6; }
+  #view-r1 iframe { width: 100%; height: calc(100vh - 120px); border: 0; display: block; }
   .dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
   details.year-block { margin: 6px 0; border: 1px solid #edf0f5; border-radius: 6px; padding: 8px 10px; }
   details.year-block summary { cursor: pointer; font-size: 13px; color: #33415c; user-select: none; }
@@ -57,7 +60,19 @@
   <a class="home" href="../index.html">← 总站</a>
   <a href="../风险平价1.0/index.html">风险平价1.0</a>
   <a class="cur" href="../风险平价权重竞争/index.html">风险平价权重竞争</a>
+  <span class="sep"></span>
+  <span class="vlabel">视图：</span>
+  <a href="javascript:void 0" id="tab-strategy" class="cur" onclick="switchView('strategy')">策略详情</a>
+  <a href="javascript:void 0" id="tab-r1" onclick="switchView('r1')">R1 面板</a>
 </div>
+
+<div id="view-r1" style="display:none">
+  <div class="panel" style="padding:0;overflow:hidden">
+    <iframe id="r1frame" title="R1 日更面板（信号监控 · 完整看板）"></iframe>
+  </div>
+</div>
+
+<div id="view-strategy">
 
 <h1>风险平价权重竞争 <span style="font-size:13px;color:#8492a6;font-weight:400">四腿 RP 权重竞价 bid=w_RP×p · water-filling 封顶 · T 收盘信号 → T+1 开盘成交</span></h1>
 <div class="sub" id="range"></div>
@@ -120,7 +135,24 @@
   <div id="latest_pre"></div>
 </div>
 
+</div><!-- /view-strategy -->
+
 <script>
+// ---------- 视图切换：策略详情 ⇄ R1 面板（iframe 懒加载，切回时触发图表 resize）----------
+function switchView(v){
+  const s = v === 'strategy';
+  document.getElementById('view-strategy').style.display = s ? '' : 'none';
+  document.getElementById('view-r1').style.display = s ? 'none' : '';
+  document.getElementById('tab-strategy').classList.toggle('cur', s);
+  document.getElementById('tab-r1').classList.toggle('cur', !s);
+  if (!s) {
+    const f = document.getElementById('r1frame');
+    if (!f.src) f.src = '../signals/r1_panel.html';
+  } else {
+    window.dispatchEvent(new Event('resize'));
+  }
+}
+
 const D = window.STRATEGY_DATA;
 const MODULE_DEF = [
   ["w_a_stock","A股","#5470c6"], ["w_hk","港股","#91cc75"], ["w_global","全球","#ee6666"],
