@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -72,6 +73,13 @@ def main():
     OUT.parent.mkdir(parents=True, exist_ok=True)
     text = json.dumps(clean(payload), ensure_ascii=False, allow_nan=False, separators=(",", ":"))
     OUT.write_text("window.INDUSTRY729_DATA = " + text + ";\n", encoding="utf-8")
+    html_path = OUT.parent / "index.html"
+    html = html_path.read_text(encoding="utf-8")
+    versioned = f'<script src="data.js?v={payload["meta"]["end"]}"></script>'
+    html, count = re.subn(r'<script src="data\.js(?:\?v=[^"]*)?"></script>', versioned, html, count=1)
+    if count != 1:
+        raise RuntimeError("未能更新 industry729 数据版本号")
+    html_path.write_text(html, encoding="utf-8")
     print(f"OK -> {OUT} ({OUT.stat().st_size / 1024:.0f} KB), {len(nav)} days, holdings={latest_date}")
 
 
