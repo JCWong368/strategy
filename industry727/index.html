@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>industry7.2.7 行业轮动策略</title>
+<script src="echarts.min.js"></script>
+<script src="data.js?v=2026-10-27"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f4f6fa; color: #2b3445; padding: 18px; }
+  .wrap { max-width: 1440px; margin: 0 auto; }
+  h1 { font-size: 22px; margin-bottom: 5px; }
+  .sub { color: #8492a6; font-size: 12px; line-height: 1.8; margin-bottom: 12px; }
+  a { color: #5470c6; text-decoration: none; }
+  .notice { background: #fff7e6; border: 1px solid #ead7ae; color: #76571c; padding: 11px 14px; border-radius: 8px; font-size: 13px; line-height: 1.8; margin-bottom: 14px; }
+  .cards { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+  .card { background: #fff; border-radius: 10px; padding: 15px 24px; box-shadow: 0 1px 3px rgba(0,0,0,.08); min-width: 165px; flex: 1; }
+  .card .k { font-size: 13px; color: #8492a6; }
+  .card .v { font-size: 27px; font-weight: 700; margin-top: 4px; }
+  .panel { background: #fff; border-radius: 9px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 14px; margin-bottom: 14px; }
+  .panel h2 { font-size: 15px; margin-bottom: 10px; color: #33415c; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  #chart_nav { width: 100%; height: 460px; }
+  #chart_year { width: 100%; height: 330px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { border-bottom: 1px solid #edf0f5; padding: 7px 8px; text-align: right; }
+  th { color: #8492a6; font-weight: 500; background: #fafbfc; }
+  td.l, th.l { text-align: left; }
+  .pos { color: #d63031; } .neg { color: #00b26a; }
+  .rules { font-size: 13px; line-height: 2; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; background: #eef2f8; margin: 2px 4px 2px 0; }
+  .codes { line-height: 1.9; }
+  .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .toolbar button { padding: 4px 12px; border: 1px solid #d0d7e2; background: #fff; border-radius: 5px; cursor: pointer; font-size: 13px; }
+  .toolbar button:hover { background: #eef2f8; }
+  .toolbar input[type=date] { padding: 4px 8px; border: 1px solid #d0d7e2; border-radius: 5px; font-size: 13px; }
+  .detail-nav { font-size: 13px; line-height: 1.9; margin-bottom: 12px; padding: 8px 10px; background: #fafbfc; border-radius: 6px; }
+  .detail-nav b { color: #5a6a85; font-weight: 500; margin-right: 6px; }
+  @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } body { padding: 10px; } .card { min-width: 135px; padding: 12px 16px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>industry7.2.7 行业轮动</h1>
+  <div class="sub" id="range"></div>
+  <div class="sub"><a href="../">← 返回策略展示总站</a></div>
+  <div class="notice"><b>策略口径：</b>本版本不含7.2.9的暴冲过滤器。N20N5 权重从 0 转为非 0 时触发 4to2 部分复建；另有连续两日 close&lt;MA5&lt;MA10 的全局止损及 511360 替换，因此不属于严格的无择时策略。</div>
+  <div class="cards" id="metrics"></div>
+  <div class="panel">
+    <h2>策略净值 / 等权基准 / 300+905基准 / 回撤（滚轮缩放）</h2>
+    <div id="chart_nav"></div>
+  </div>
+  <div class="grid2">
+    <div class="panel"><h2>分年收益与波动</h2><div id="chart_year"></div></div>
+    <div class="panel"><h2>策略规则</h2><div class="rules">
+      <div><span class="tag">选股</span>RS10 相对强度降序，直接选取 Top5；不使用暴冲过滤器</div>
+      <div><span class="tag">轮转</span>7 个 slot 错日阶梯，单 slot 持有 7 日</div>
+      <div><span class="tag">复建</span>N20N5 权重从 0 转为非 0 时触发 4to2 部分复建</div>
+      <div><span class="tag">止损</span>最短剩余持有期的前 2 个非到期 slot 扫描，空头确认后替换为 511360</div>
+      <div><span class="tag">执行</span>T 日信号，T+1 开盘执行；费率万 0.55</div>
+    </div></div>
+  </div>
+  <div class="panel">
+    <h2>指定日期详情</h2>
+    <div class="toolbar">
+      <button id="prev">← 前一交易日</button>
+      <input type="date" id="datepick">
+      <button id="next">后一交易日 →</button>
+      <span class="sub" id="curtip" style="margin:0"></span>
+    </div>
+    <div class="detail-nav" id="detail_nav"></div>
+    <div class="grid2">
+      <div><h2 id="hold_title">合并持仓</h2><div id="holdings"></div></div>
+      <div><h2>Slot 状态</h2><div id="slots"></div></div>
+    </div>
+  </div>
+</div>
+<script>
+const D = window.INDUSTRY727_DATA;
+const pct = (x, d=1) => (x*100).toFixed(d) + "%";
+const navChart = echarts.init(document.getElementById("chart_nav"));
+const yearChart = echarts.init(document.getElementById("chart_year"));
+
+document.getElementById("range").textContent = `回测区间 ${D.meta.start} ~ ${D.meta.end}（${D.meta.days} 个交易日）｜RS10 Top5 · 7-Slot · 0→非0触发4to2 · 全局止损`;
+document.getElementById("metrics").innerHTML = [
+  ["累计收益", pct(D.metrics.total_return), "pos"],
+  ["年化收益", pct(D.metrics.annual_return), "pos"],
+  ["最大回撤", pct(D.metrics.max_drawdown), "neg"],
+  ["夏普比率", D.metrics.sharpe, ""],
+  ["卡玛比率", D.metrics.calmar, ""],
+  ["年化波动", pct(D.metrics.annual_vol), ""],
+].map(([k,v,c]) => `<div class="card"><div class="k">${k}</div><div class="v ${c}">${v}</div></div>`).join("");
+
+navChart.setOption({
+  animation: false,
+  tooltip: { trigger: "axis", axisPointer: { type: "cross" },
+    formatter: ps => {
+      let s = ps[0].axisValue;
+      ps.forEach(p => { const v = p.seriesName === "回撤" ? pct(p.value[1],2) : (+p.value[1]).toFixed(4); s += `<br>${p.marker}${p.seriesName}: <b>${v}</b>`; });
+      return s;
+    }},
+  legend: { top: 0 },
+  axisPointer: { link: [{ xAxisIndex: "all" }] },
+  grid: [{left:60,right:20,top:42,height:"56%"}, {left:60,right:20,top:"72%",height:"13%"}],
+  xAxis: [{type:"time",gridIndex:0}, {type:"time",gridIndex:1,show:false}],
+  yAxis: [{type:"value",scale:true,gridIndex:0,name:"净值"}, {type:"value",gridIndex:1,max:0,axisLabel:{formatter:v=>(v*100).toFixed(0)+"%"}}],
+  dataZoom: [{type:"inside",xAxisIndex:[0,1]}, {type:"slider",xAxisIndex:[0,1],bottom:5,height:22}],
+  series: [
+    {name:"industry7.2.7",type:"line",xAxisIndex:0,yAxisIndex:0,showSymbol:false,color:"#5470c6",lineStyle:{width:1.8},data:D.nav.map(r=>[r[0],r[1]])},
+    {name:"66池等权",type:"line",xAxisIndex:0,yAxisIndex:0,showSymbol:false,color:"#91cc75",lineStyle:{width:1.1},data:D.nav.map(r=>[r[0],r[2]])},
+    {name:"300+905",type:"line",xAxisIndex:0,yAxisIndex:0,showSymbol:false,color:"#a0aab8",lineStyle:{width:1.1},data:D.nav.map(r=>[r[0],r[3]])},
+    {name:"回撤",type:"line",xAxisIndex:1,yAxisIndex:1,showSymbol:false,color:"#ee6666",areaStyle:{opacity:.3},lineStyle:{width:1},data:D.nav.map(r=>[r[0],r[4]])},
+  ],
+});
+
+yearChart.setOption({
+  animation: false,
+  tooltip: {trigger:"axis"},
+  legend: {top:0},
+  grid: {left:50,right:25,top:40,bottom:35},
+  xAxis: {type:"category",data:D.annual.map(r=>r[0])},
+  yAxis: [{type:"value",name:"收益",axisLabel:{formatter:v=>(v*100).toFixed(0)+"%"}}, {type:"value",name:"波动",axisLabel:{formatter:v=>(v*100).toFixed(0)+"%"}}],
+  series: [
+    {name:"年度收益",type:"bar",data:D.annual.map(r=>({value:r[1],itemStyle:{color:r[1]>=0?"#d63031":"#00b26a"}}))},
+    {name:"年度波动",type:"line",yAxisIndex:1,color:"#5470c6",data:D.annual.map(r=>r[2])},
+  ],
+});
+
+// ---------- 指定日期详情 ----------
+const dates = D.nav.map(r => r[0]);
+const slotMap = {};
+D.daily_slots.forEach(r => { (slotMap[r[0]] ||= []).push(r); });
+let curIdx = dates.length - 1;
+const pick = document.getElementById("datepick");
+pick.min = dates[0]; pick.max = dates[dates.length - 1];
+function nearestIdx(dstr){
+  let lo = 0, hi = dates.length - 1, ans = 0;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (dates[mid] <= dstr) { ans = mid; lo = mid + 1; } else hi = mid - 1;
+  }
+  return ans;
+}
+function setDate(dstr){ curIdx = nearestIdx(dstr); renderDetail(); }
+document.getElementById("prev").onclick = () => { if (curIdx > 0) { curIdx--; renderDetail(); } };
+document.getElementById("next").onclick = () => { if (curIdx < dates.length - 1) { curIdx++; renderDetail(); } };
+pick.onchange = () => setDate(pick.value);
+navChart.on("click", p => { if (p.value && p.value[0]) setDate(p.value[0]); });
+
+function renderDetail(){
+  const row = D.nav[curIdx], d = row[0], dailySlots = slotMap[d] || [];
+  pick.value = d;
+  document.getElementById("curtip").textContent = `第 ${curIdx+1}/${dates.length} 个交易日`;
+  const dayRet = curIdx > 0 ? row[1] / D.nav[curIdx-1][1] - 1 : null;
+  document.getElementById("detail_nav").innerHTML =
+    `<b>净值</b>${row[1].toFixed(4)}　<b>日收益</b><span class="${dayRet>=0?'pos':'neg'}">${dayRet==null?'—':pct(dayRet,2)}</span>　` +
+    `<b>回撤</b><span class="neg">${pct(row[4],2)}</span>　<b>66池等权</b>${row[2].toFixed(4)}　<b>300+905</b>${row[3].toFixed(4)}`;
+  const aggregated = {};
+  dailySlots.forEach(s => Object.entries(s[4]).forEach(([c,q]) => { aggregated[c] = (aggregated[c] || 0) + q; }));
+  const holdings = Object.entries(aggregated).sort((a,b) => b[1]-a[1]);
+  document.getElementById("hold_title").textContent = `合并持仓（${d}，数量单位：份）`;
+  document.getElementById("holdings").innerHTML = holdings.length
+    ? `<table><tr><th class="l">代码</th><th class="l">名称</th><th>合并数量</th></tr>${holdings.map(([c,q])=>`<tr><td class="l">${c}</td><td class="l">${D.names[c]||c}</td><td>${q.toLocaleString()}</td></tr>`).join("")}</table>`
+    : `<div class="sub">该日期无实际持仓</div>`;
+  document.getElementById("slots").innerHTML = `<table><tr><th>Slot</th><th class="l">目标代码</th><th>上次实际调仓日</th><th>实际数量</th></tr>${dailySlots.map(s=>`<tr><td>${s[1]}</td><td class="l codes">${s[2]?s[2].split(",").map(c=>`<span class="tag">${c}</span>`).join(""):"—"}</td><td>${s[3]}</td><td>${Object.values(s[4]).reduce((a,b)=>a+b,0).toLocaleString()}</td></tr>`).join("")}</table>`;
+}
+renderDetail();
+window.addEventListener("resize", () => { navChart.resize(); yearChart.resize(); });
+</script>
+</body>
+</html>
