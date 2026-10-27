@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>industry7.2.9 行业轮动策略</title>
 <script src="echarts.min.js"></script>
-<script src="data.js?v=2026-10-26 00:00:00"></script>
+<script src="data.js?v=2026-10-26"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f4f6fa; color: #2b3445; padding: 18px; }
@@ -31,6 +31,12 @@
   .rules { font-size: 13px; line-height: 2; }
   .tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; background: #eef2f8; margin: 2px 4px 2px 0; }
   .codes { line-height: 1.9; }
+  .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .toolbar button { padding: 4px 12px; border: 1px solid #d0d7e2; background: #fff; border-radius: 5px; cursor: pointer; font-size: 13px; }
+  .toolbar button:hover { background: #eef2f8; }
+  .toolbar input[type=date] { padding: 4px 8px; border: 1px solid #d0d7e2; border-radius: 5px; font-size: 13px; }
+  .detail-nav { font-size: 13px; line-height: 1.9; margin-bottom: 12px; padding: 8px 10px; background: #fafbfc; border-radius: 6px; }
+  .detail-nav b { color: #5a6a85; font-weight: 500; margin-right: 6px; }
   @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } body { padding: 10px; } .card { min-width: 135px; padding: 12px 16px; } }
 </style>
 </head>
@@ -55,8 +61,20 @@
       <div><span class="tag">执行</span>T 日信号，T+1 开盘执行；费率万 0.55</div>
     </div></div>
   </div>
-  <div class="panel"><h2 id="hold_title">最新合并持仓</h2><div id="holdings"></div></div>
-  <div class="panel"><h2>最新 Slot 状态</h2><div id="slots"></div></div>
+  <div class="panel">
+    <h2>指定日期详情</h2>
+    <div class="toolbar">
+      <button id="prev">← 前一交易日</button>
+      <input type="date" id="datepick">
+      <button id="next">后一交易日 →</button>
+      <span class="sub" id="curtip" style="margin:0"></span>
+    </div>
+    <div class="detail-nav" id="detail_nav"></div>
+    <div class="grid2">
+      <div><h2 id="hold_title">合并持仓</h2><div id="holdings"></div></div>
+      <div><h2>Slot 状态</h2><div id="slots"></div></div>
+    </div>
+  </div>
 </div>
 <script>
 const D = window.INDUSTRY729_DATA;
@@ -109,9 +127,45 @@ yearChart.setOption({
   ],
 });
 
-document.getElementById("hold_title").textContent = `最新合并持仓（${D.meta.holdings_date}，数量单位：份）`;
-document.getElementById("holdings").innerHTML = `<table><tr><th class="l">代码</th><th class="l">名称</th><th>合并数量</th></tr>${D.holdings.map(h=>`<tr><td class="l">${h.code}</td><td class="l">${h.name}</td><td>${h.quantity.toLocaleString()}</td></tr>`).join("")}</table>`;
-document.getElementById("slots").innerHTML = `<table><tr><th>Slot</th><th class="l">持仓代码</th><th>上次实际调仓日</th><th>合并数量</th></tr>${D.slots.map(s=>`<tr><td>${s.slot}</td><td class="l codes">${s.codes.split(",").map(c=>`<span class="tag">${c}</span>`).join("")}</td><td>${s.maturity_date}</td><td>${Object.values(s.positions).reduce((a,b)=>a+b,0).toLocaleString()}</td></tr>`).join("")}</table>`;
+// ---------- 指定日期详情 ----------
+const dates = D.nav.map(r => r[0]);
+const slotMap = {};
+D.daily_slots.forEach(r => { (slotMap[r[0]] ||= []).push(r); });
+let curIdx = dates.length - 1;
+const pick = document.getElementById("datepick");
+pick.min = dates[0]; pick.max = dates[dates.length - 1];
+function nearestIdx(dstr){
+  let lo = 0, hi = dates.length - 1, ans = 0;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (dates[mid] <= dstr) { ans = mid; lo = mid + 1; } else hi = mid - 1;
+  }
+  return ans;
+}
+function setDate(dstr){ curIdx = nearestIdx(dstr); renderDetail(); }
+document.getElementById("prev").onclick = () => { if (curIdx > 0) { curIdx--; renderDetail(); } };
+document.getElementById("next").onclick = () => { if (curIdx < dates.length - 1) { curIdx++; renderDetail(); } };
+pick.onchange = () => setDate(pick.value);
+navChart.on("click", p => { if (p.value && p.value[0]) setDate(p.value[0]); });
+
+function renderDetail(){
+  const row = D.nav[curIdx], d = row[0], dailySlots = slotMap[d] || [];
+  pick.value = d;
+  document.getElementById("curtip").textContent = `第 ${curIdx+1}/${dates.length} 个交易日`;
+  const dayRet = curIdx > 0 ? row[1] / D.nav[curIdx-1][1] - 1 : null;
+  document.getElementById("detail_nav").innerHTML =
+    `<b>净值</b>${row[1].toFixed(4)}　<b>日收益</b><span class="${dayRet>=0?'pos':'neg'}">${dayRet==null?'—':pct(dayRet,2)}</span>　` +
+    `<b>回撤</b><span class="neg">${pct(row[4],2)}</span>　<b>66池等权</b>${row[2].toFixed(4)}　<b>300+905</b>${row[3].toFixed(4)}`;
+  const aggregated = {};
+  dailySlots.forEach(s => Object.entries(s[4]).forEach(([c,q]) => { aggregated[c] = (aggregated[c] || 0) + q; }));
+  const holdings = Object.entries(aggregated).sort((a,b) => b[1]-a[1]);
+  document.getElementById("hold_title").textContent = `合并持仓（${d}，数量单位：份）`;
+  document.getElementById("holdings").innerHTML = holdings.length
+    ? `<table><tr><th class="l">代码</th><th class="l">名称</th><th>合并数量</th></tr>${holdings.map(([c,q])=>`<tr><td class="l">${c}</td><td class="l">${D.names[c]||c}</td><td>${q.toLocaleString()}</td></tr>`).join("")}</table>`
+    : `<div class="sub">该日期无实际持仓</div>`;
+  document.getElementById("slots").innerHTML = `<table><tr><th>Slot</th><th class="l">目标代码</th><th>上次实际调仓日</th><th>实际数量</th></tr>${dailySlots.map(s=>`<tr><td>${s[1]}</td><td class="l codes">${s[2]?s[2].split(",").map(c=>`<span class="tag">${c}</span>`).join(""):"—"}</td><td>${s[3]}</td><td>${Object.values(s[4]).reduce((a,b)=>a+b,0).toLocaleString()}</td></tr>`).join("")}</table>`;
+}
+renderDetail();
 window.addEventListener("resize", () => { navChart.resize(); yearChart.resize(); });
 </script>
 </body>

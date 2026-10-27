@@ -54,9 +54,14 @@ def main():
         })
     holdings = [{"code": code, "name": names.get(code, code), "quantity": quantity}
                 for code, quantity in sorted(aggregated.items(), key=lambda x: -x[1])]
+    daily_slots = []
+    for row in slots.itertuples(index=False):
+        daily_slots.append([row.date, int(row.slot), row.codes, row.maturity_date,
+                            json.loads(row.positions)])
     payload = {
         "meta": {
-            "start": nav["date"].iloc[0], "end": nav["date"].iloc[-1], "days": len(nav),
+            "start": nav["date"].iloc[0].strftime("%Y-%m-%d"),
+            "end": nav["date"].iloc[-1].strftime("%Y-%m-%d"), "days": len(nav),
             "holdings_date": latest_date,
             "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         },
@@ -69,6 +74,8 @@ def main():
         "annual": [[int(r["year"]), r["return"], r["volatility"]] for r in metrics_raw["annual_returns"]],
         "slots": slot_rows,
         "holdings": holdings,
+        "daily_slots": daily_slots,
+        "names": names,
     }
     OUT.parent.mkdir(parents=True, exist_ok=True)
     text = json.dumps(clean(payload), ensure_ascii=False, allow_nan=False, separators=(",", ":"))
