@@ -4,6 +4,7 @@
 输出 风险平价2.0/data.js（window.STRATEGY_DATA = {...}），供同目录 index.html 使用。
 数据块：
   names / metrics / nav / weights / benchmarks        —— 与 macro407 同 schema
+  reference_benchmarks —— 四条独立满仓基准（由原始行情构建，含指标与数据质量）
   positions      —— 每日 ETF 持仓（组合层权重，回测生效口径）
   rp_daily       —— RP 底座生效权重 w_eff + 池借款 borrow + 池快照 S/D/tight
   rebal_dates    —— 季度重估日列表（净值图标注用）
@@ -29,6 +30,7 @@ BASE = ROOT / '实盘运行策略' / '风险平价2.0'
 OUT = HERE / '风险平价2.0' / 'data.js'
 sys.path.insert(0, str(ROOT / '风险平价' / 'src'))
 import core  # noqa: E402
+from build_rp2_reference_benchmarks import build_reference_benchmarks  # noqa: E402
 
 CFG = core.load_cfg()
 GL_ETF_INNER = {'513500': 0.5, '513030': 0.15, '513080': 0.15, '513880': 0.2}
@@ -306,10 +308,12 @@ def main():
 
     rp_daily, rebal_dates = build_rp_daily(nav)
     signals = build_signals()
+    reference_benchmarks = build_reference_benchmarks(ROOT, nav_dates)
 
     data = {
         'names': names, 'metrics': metrics, 'nav': nav_series,
         'weights': weight_series, 'benchmarks': benchmarks,
+        'reference_benchmarks': reference_benchmarks,
         'positions': positions, 'a_stock_detail': a_detail, 'rp_daily': rp_daily,
         'rebal_dates': rebal_dates, 'signals': signals,
     }

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>风险平价2.0 策略展示</title>
 <script src="echarts.min.js"></script>
-<script src="data.js?v=1793398292"></script>
+<script src="data.js?v=1793518627"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f4f6fa; color: #2b3445; padding: 16px; }
@@ -25,6 +25,11 @@
   #chart_nav { width: 100%; height: 460px; }
   #chart_w { width: 100%; height: 280px; }
   #chart_hp { width: 100%; height: 300px; }
+  #chart_ref { width: 100%; height: 390px; }
+  .ref-warning { color: #a04700; background: #fff7e8; border: 1px solid #f0d7ae; border-radius: 6px; padding: 9px 11px; font-size: 13px; line-height: 1.7; margin-bottom: 8px; }
+  .ref-note { color: #5a6a85; font-size: 12px; line-height: 1.8; }
+  .table-wrap { width: 100%; overflow-x: auto; }
+  .table-wrap table { min-width: 900px; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   @media (max-width: 1100px) { .grid2 { grid-template-columns: 1fr; } }
   table { border-collapse: collapse; width: 100%; font-size: 13px; }
@@ -71,6 +76,14 @@
     <label><input type="checkbox" id="showred"> 标注季度重估日</label>
   </div>
   <div id="chart_nav"></div>
+</div>
+
+<div class="panel">
+  <h2>满仓参考基准（独立展示）</h2>
+  <div class="ref-warning"><b>满仓参考基准，不含择时、选股、风险平价权重、共享池或国债配置，不是可交易建议。</b>各曲线独立归一，仅用于对照，不参与风险平价2.0净值计算。</div>
+  <div id="chart_ref"></div>
+  <div class="table-wrap" id="ref_metrics"></div>
+  <div class="ref-note" id="ref_notes" style="margin-top:10px"></div>
 </div>
 
 <div class="panel">
@@ -203,6 +216,54 @@ navChart.setOption(navOption());
 document.getElementById("logscale").onchange = () => navChart.setOption(navOption(), true);
 document.getElementById("showred").onchange = () => navChart.setOption(navOption(), true);
 navChart.on("click", p => { if (p.value && p.value[0]) setDate(p.value[0]); });
+
+// ---------- 满仓参考基准（独立展示）----------
+const refChart = echarts.init(document.getElementById("chart_ref"));
+const refEntries = Object.entries(D.reference_benchmarks || {});
+const refColors = { A_FIVE_EQ: "#5470c6", HK_EW: "#91cc75", GL_SIGNAL: "#ee6666", CMD_STATIC: "#fac858" };
+refChart.setOption({
+  animation: false,
+  tooltip: { trigger: "axis", axisPointer: { type: "cross" },
+    formatter: ps => {
+      if (!ps.length) return "";
+      let s = ps[0].axisValue;
+      ps.forEach(p => {
+        const v = p.value && p.value[1] != null ? (+p.value[1]).toFixed(4) : "缺报价";
+        s += `<br>${p.marker}${p.seriesName}: <b>${v}</b>`;
+      });
+      return s;
+    }},
+  legend: { top: 0, type: "scroll" },
+  grid: { left: 60, right: 20, top: 45, bottom: 65 },
+  xAxis: { type: "time" },
+  yAxis: { type: "value", scale: true, name: "净值（首点=1）" },
+  dataZoom: [{ type: "inside" }, { type: "slider", bottom: 8, height: 22 }],
+  series: refEntries.map(([key, b]) => ({
+    name: key, type: "line", showSymbol: false, connectNulls: false,
+    color: refColors[key], lineStyle: { width: 1.6 }, data: b.nav,
+  })),
+});
+(function(){
+  let h = `<table><tr><th class="l">基准</th><th>有效区间</th><th>有效日数</th><th>累计收益</th><th>年化收益</th><th>年化波动</th><th>Sharpe</th><th>最大回撤</th><th>期末净值</th><th>异常缺失</th></tr>`;
+  refEntries.forEach(([key, b]) => {
+    const m = b.metrics, valid = b.nav.filter(r => r[1] != null);
+    const endNav = valid.length ? valid[valid.length - 1][1] : null;
+    h += `<tr><td class="l"><b>${key}</b> ${b.name}</td><td>${m.start} ~ ${m.end}</td><td>${m.days}</td>`
+      + `<td class="${m.total_return>=0?'pos':'neg'}">${pct(m.total_return,2)}</td>`
+      + `<td class="${m.annual_return>=0?'pos':'neg'}">${pct(m.annual_return,2)}</td>`
+      + `<td>${pct(m.annual_vol,2)}</td><td>${m.sharpe.toFixed(3)}</td>`
+      + `<td class="neg">${pct(m.max_drawdown,2)}</td><td>${endNav == null ? "-" : endNav.toFixed(4)}</td>`
+      + `<td>${b.data_quality.missing_count}</td></tr>`;
+  });
+  document.getElementById("ref_metrics").innerHTML = h + `</table>`;
+  document.getElementById("ref_notes").innerHTML = refEntries.map(([key, b]) => {
+    const q = b.data_quality;
+    const missing = q.missing_count ? `异常缺失：${q.missing_dates.join("、")}。` : "当前无异常缺失。";
+    const closed = q.normal_closed_count ? `正常休市持平 ${q.normal_closed_count} 日。` : "";
+    return `<details class="year-block"><summary><b>${key} 口径与数据质量</b></summary><div style="margin-top:7px">`
+      + `${b.definition}<br>${b.price_basis}<br>${q.notes.join("<br>")}<br>${missing}${closed}</div></details>`;
+  }).join("");
+})();
 
 // ---------- 月度绩效（分年，默认折叠）----------
 (function(){
@@ -411,7 +472,7 @@ function renderLatestPre(){
 renderDetail();
 renderLatestPre();
 
-window.addEventListener("resize", () => { navChart.resize(); wChart.resize(); });
+window.addEventListener("resize", () => { navChart.resize(); refChart.resize(); wChart.resize(); });
 </script>
 </body>
 </html>
