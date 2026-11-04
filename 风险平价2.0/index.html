@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>风险平价2.0 策略展示</title>
 <script src="echarts.min.js"></script>
-<script src="data.js?v=1793743551"></script>
+<script src="data.js?v=1793802346"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f4f6fa; color: #2b3445; padding: 16px; }
@@ -26,6 +26,18 @@
   #chart_w { width: 100%; height: 280px; }
   #chart_hp { width: 100%; height: 300px; }
   #chart_ref { width: 100%; height: 390px; }
+  .bz-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin: 10px 0 14px; }
+  .bz-card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; background: #fafbfc; }
+  .bz-card .nm { font-size: 13px; font-weight: 600; color: #33415c; }
+  .bz-card .dt { font-size: 11px; color: #8492a6; margin: 2px 0 6px; }
+  .bz-card .nums { display: flex; gap: 18px; font-size: 13px; line-height: 1.8; }
+  .bz-card .nums b { font-size: 19px; color: #2b3445; }
+  .bz-card .chg { font-size: 11px; color: #5a6a85; line-height: 1.7; }
+  .bz-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .bz-chart { width: 100%; height: 290px; }
+  .toolbar select { padding: 4px 8px; border: 1px solid #d0d7e2; border-radius: 5px; font-size: 13px; background: #fff; }
+  .toolbar button.on { background: #5470c6; border-color: #5470c6; color: #fff; }
+  @media (max-width: 900px) { .bz-charts { grid-template-columns: 1fr; } }
   .ref-warning { color: #a04700; background: #fff7e8; border: 1px solid #f0d7ae; border-radius: 6px; padding: 9px 11px; font-size: 13px; line-height: 1.7; margin-bottom: 8px; }
   .ref-note { color: #5a6a85; font-size: 12px; line-height: 1.8; }
   .table-wrap { width: 100%; overflow-x: auto; }
@@ -100,6 +112,26 @@
 <div class="panel">
   <h2>四袖 + 国债511130 + 现金（堆叠，含池借款）</h2>
   <div id="chart_w"></div>
+</div>
+
+<div class="panel">
+  <h2>袖最终 beta / Z 参数（当前值与历史变化）</h2>
+  <div class="ref-note">
+    仅展示 A股综合指数、全球四国组合指数及商品五腿的原始信号参数；横轴为信号计算日。
+    港股九态不使用 beta/Z，国债不择时，均不在本面板展示。beta/Z 使用各对象原生 N 窗口，缺失日不插值。
+  </div>
+  <div class="bz-cards" id="bz_cards"></div>
+  <div class="toolbar">
+    <label>历史对象 <select id="bz_select"></select></label>
+    <span class="sub" style="margin:0">时间轴：</span>
+    <button data-bz-window="60">60日</button>
+    <button data-bz-window="250" class="on">250日</button>
+    <button data-bz-window="0">全部</button>
+  </div>
+  <div class="bz-charts">
+    <div id="chart_beta" class="bz-chart"></div>
+    <div id="chart_z" class="bz-chart"></div>
+  </div>
 </div>
 
 <div class="panel">
@@ -360,6 +392,82 @@ wChart.setOption({
   })),
 });
 
+// ---------- 袖最终 beta / Z 参数 ----------
+const bzData = D.beta_z || {};
+const bzKeys = Object.keys(bzData);
+const bzStateName = { A: "上升加速", B: "上升减速", C: "下降加速", D: "下降减速" };
+const betaChart = echarts.init(document.getElementById("chart_beta"));
+const zChart = echarts.init(document.getElementById("chart_z"));
+let bzKey = bzKeys[0];
+let bzWindow = 250;
+const bzNum = v => v == null ? "—" : (+v).toFixed(3);
+const bzSigned = v => v == null ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(3)}`;
+
+function renderBetaZCards(){
+  document.getElementById("bz_cards").innerHTML = bzKeys.map(key => {
+    const item = bzData[key];
+    const valid = item.rows.filter(r => r[1] != null && r[2] != null);
+    if (!valid.length) return "";
+    const last = valid[valid.length - 1];
+    const d1 = valid.length > 1 ? valid[valid.length - 2] : null;
+    const d5 = valid.length > 5 ? valid[valid.length - 6] : null;
+    return `<div class="bz-card">
+      <div class="nm">${item.sleeve}｜${item.name}</div>
+      <div class="dt">${last[0]}　${item.window}　${bzStateName[last[3]] || "—"}</div>
+      <div class="nums"><span>beta<br><b>${bzNum(last[1])}</b></span><span>Z<br><b>${bzNum(last[2])}</b></span></div>
+      <div class="chg">较1日：β ${bzSigned(d1 ? last[1]-d1[1] : null)}　Z ${bzSigned(d1 ? last[2]-d1[2] : null)}<br>
+      较5日：β ${bzSigned(d5 ? last[1]-d5[1] : null)}　Z ${bzSigned(d5 ? last[2]-d5[2] : null)}</div>
+    </div>`;
+  }).join("");
+}
+
+function bzOption(paramIndex, label, color){
+  const item = bzData[bzKey];
+  const allRows = item ? item.rows : [];
+  const rows = bzWindow ? allRows.slice(-bzWindow) : allRows;
+  return {
+    animation: false,
+    title: { text: item ? `${item.name} · ${label}（${item.window}）` : "无数据",
+             left: "center", top: 4, textStyle: { fontSize: 13, fontWeight: 500 } },
+    tooltip: { trigger: "axis", axisPointer: { type: "cross" },
+      formatter: ps => {
+        if (!ps.length) return "";
+        const r = rows[ps[0].dataIndex];
+        return r ? `${r[0]}<br>${label}: <b>${bzNum(r[paramIndex])}</b><br>状态：${bzStateName[r[3]] || "—"}` : "";
+      } },
+    grid: { left: 58, right: 18, top: 42, bottom: 48 },
+    xAxis: { type: "time" },
+    yAxis: { type: "value", scale: true, name: label },
+    dataZoom: [{ type: "inside" }, { type: "slider", bottom: 5, height: 18 }],
+    series: [{ name: label, type: "line", showSymbol: false, connectNulls: false,
+      color, lineStyle: { width: 1.7 },
+      data: rows.map(r => [r[0], r[paramIndex]]),
+      markLine: { symbol: "none", label: { show: false },
+        lineStyle: { color: "#a0aab8", type: "dashed" }, data: [{ yAxis: 0 }] } }],
+  };
+}
+
+function renderBetaZ(){
+  if (!bzKey) return;
+  betaChart.setOption(bzOption(1, "beta", "#5470c6"), true);
+  zChart.setOption(bzOption(2, "Z", "#ee6666"), true);
+}
+
+document.getElementById("bz_select").innerHTML = bzKeys.map(key => {
+  const item = bzData[key];
+  return `<option value="${key}">${item.sleeve}｜${item.name}（${item.window}）</option>`;
+}).join("");
+document.getElementById("bz_select").onchange = ev => { bzKey = ev.target.value; renderBetaZ(); };
+document.querySelectorAll("[data-bz-window]").forEach(btn => {
+  btn.onclick = () => {
+    bzWindow = +btn.dataset.bzWindow;
+    document.querySelectorAll("[data-bz-window]").forEach(b => b.classList.toggle("on", b === btn));
+    renderBetaZ();
+  };
+});
+renderBetaZCards();
+renderBetaZ();
+
 // ---------- 日期详情 ----------
 let curIdx = nearestIdx(D.metrics.end);   // 默认最后回测日；最新 precompute 在下方独立面板
 const pick = document.getElementById("datepick");
@@ -472,7 +580,9 @@ function renderLatestPre(){
 renderDetail();
 renderLatestPre();
 
-window.addEventListener("resize", () => { navChart.resize(); refChart.resize(); wChart.resize(); });
+window.addEventListener("resize", () => {
+  navChart.resize(); refChart.resize(); wChart.resize(); betaChart.resize(); zChart.resize();
+});
 </script>
 </body>
 </html>

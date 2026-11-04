@@ -9,7 +9,9 @@
   rp_daily       —— RP 底座生效权重 w_eff + 池借款 borrow + 池快照 S/D/tight
   rebal_dates    —— 季度重估日列表（净值图标注用）
   signals        —— precompute 信号（含 T+1 目标持仓，最新数据日及其后）
-自校验：每日 ETF 权重合计 ≈ 四袖仓位+bond_pos（容差 1e-6，超限打印 WARN）。
+  beta_z         —— A股、全球、商品五腿的 beta/Z/状态历史（信号计算日）
+自校验：每日 ETF 权重合计 ≈ 四袖仓位+bond_pos（容差 1e-6，超限打印 WARN）；
+        beta/Z 与 A/B/C/D 状态象限逐日一致，不一致即中止。
 
 用法（项目根下，解释器按项目硬规则探测）：
   PYTHONPATH=C:/quant_env/pylibs "<python>" -X utf8 策略汇报/网页展示/build_rp2_data.py
@@ -232,6 +234,58 @@ def build_signals():
     return signals
 
 
+def build_beta_z():
+    """袖最终 beta/Z 信号参数：A股、全球及商品五腿；使用信号计算日。"""
+    commodity_states = ROOT / '09_商品' / '商品择时2.0_N5组合回测' / 'states'
+    sources = [
+        ('a', 'A股', 'A股综合指数', 'N20',
+         ROOT / '02_分析类' / '综合指数N20N5状态' / 'composite_n20n5_states.csv',
+         'beta_n20', 'Z_n20', 'N20'),
+        ('gl', '全球', '全球四国组合指数', 'N5',
+         ROOT / '10_全球' / '全球组合指数择时1.0' / 'output' / 'signal_daily.csv',
+         'beta_annual', 'Z', 'N20_state'),
+    ]
+    for code, name in [('159980', '有色'), ('159985', '豆粕'),
+                       ('159981', '能化'), ('518880', '黄金')]:
+        sources.append((f'cmd_{code}', '商品', f'{name}{code}', 'N5',
+                        commodity_states / f'{code}_n5_states.csv',
+                        'beta_annual', 'Z', 'N5'))
+    sources.append((
+        'cmd_513350', '商品', '油气513350', 'N3',
+        ROOT / '09_商品' / '商品环境1.0' / '油气' / 'N窗口搜索' / 'output' /
+        'states' / '513350_n3_states.csv', 'beta_annual', 'Z', 'N5'))
+
+    def quadrant(beta, z):
+        if beta >= 0 and z >= 0:
+            return 'A'
+        if beta >= 0:
+            return 'B'
+        return 'D' if z >= 0 else 'C'
+
+    out = {}
+    for key, sleeve, name, window, path, beta_col, z_col, state_col in sources:
+        df = pd.read_csv(path, encoding='utf-8-sig',
+                         usecols=['date', beta_col, z_col, state_col])
+        df['date'] = pd.to_datetime(df['date'])
+        df = df.sort_values('date').drop_duplicates('date', keep='last')
+        rows = []
+        mismatches = []
+        for r in df.itertuples(index=False):
+            beta_raw, z_raw = getattr(r, beta_col), getattr(r, z_col)
+            beta = float(beta_raw) if pd.notna(beta_raw) else None
+            z = float(z_raw) if pd.notna(z_raw) else None
+            state = str(getattr(r, state_col)) if pd.notna(getattr(r, state_col)) else None
+            if beta is not None and z is not None and state:
+                expected = quadrant(beta, z)
+                if state != expected:
+                    mismatches.append((r.date.strftime('%Y-%m-%d'), state, expected))
+            rows.append([r.date.strftime('%Y-%m-%d'), beta, z, state])
+        if mismatches:
+            raise RuntimeError(f'{name} beta/Z 与状态象限不一致：{mismatches[:5]}')
+        out[key] = {'name': name, 'sleeve': sleeve, 'window': window, 'rows': rows}
+    return out
+
+
 def main():
     names = load_names()
     nav = pd.read_csv(BASE / 'output' / 'nav_daily.csv', encoding='utf-8-sig')
@@ -309,13 +363,14 @@ def main():
     rp_daily, rebal_dates = build_rp_daily(nav)
     signals = build_signals()
     reference_benchmarks = build_reference_benchmarks(ROOT, nav_dates)
+    beta_z = build_beta_z()
 
     data = {
         'names': names, 'metrics': metrics, 'nav': nav_series,
         'weights': weight_series, 'benchmarks': benchmarks,
         'reference_benchmarks': reference_benchmarks,
         'positions': positions, 'a_stock_detail': a_detail, 'rp_daily': rp_daily,
-        'rebal_dates': rebal_dates, 'signals': signals,
+        'rebal_dates': rebal_dates, 'signals': signals, 'beta_z': beta_z,
     }
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text('window.STRATEGY_DATA = '
