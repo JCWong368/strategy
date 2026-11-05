@@ -10,8 +10,10 @@
   rebal_dates    —— 季度重估日列表（净值图标注用）
   signals        —— precompute 信号（含 T+1 目标持仓，最新数据日及其后）
   beta_z         —— A股、全球、商品五腿的 beta/Z/状态历史（信号计算日）
+  hk_timing      —— 港股九态仓位系数历史（生效日）与最新信号（标签日）
 自校验：每日 ETF 权重合计 ≈ 四袖仓位+bond_pos（容差 1e-6，超限打印 WARN）；
-        beta/Z 与 A/B/C/D 状态象限逐日一致，不一致即中止。
+        beta/Z 与 A/B/C/D 状态象限逐日一致；港股 p_hk 与 rp_daily/precompute
+        同口径交叉核验，不一致即中止。
 
 用法（项目根下，解释器按项目硬规则探测）：
   PYTHONPATH=C:/quant_env/pylibs "<python>" -X utf8 策略汇报/网页展示/build_rp2_data.py
@@ -234,6 +236,72 @@ def build_signals():
     return signals
 
 
+def build_hk_timing(rp_daily, signals):
+    """港股九态仓位系数：历史按生效日，最新信号按标签日；只读上游产物。"""
+    from bisect import bisect_right
+
+    hk_dir = ROOT / '16_港股通' / '港股通九态系数择时'
+    sys.path.insert(0, str(hk_dir))
+    from overlay_backtest import COEF as coef_map
+
+    overlay = pd.read_csv(hk_dir / 'output' / 'overlay_coef_v1.csv',
+                          encoding='utf-8-sig', parse_dates=['date'])
+    overlay = overlay.sort_values('date').drop_duplicates('date', keep='last')
+    labels = pd.read_csv(hk_dir / 'output' / 'hk_env_labels.csv',
+                         encoding='utf-8-sig', parse_dates=['date'])
+    labels = labels[pd.notna(labels['EW_joint9']) & (labels['EW_joint9'] != '')]
+    label_days = list(labels['date'].sort_values())
+    label_by_day = dict(zip(labels['date'], labels['EW_joint9']))
+
+    def label_asof(day):
+        if day is None:
+            return None
+        pos = bisect_right(label_days, day) - 1
+        return label_days[pos] if pos >= 0 else None
+
+    rows = []
+    previous_date = None
+    for r in overlay.itertuples(index=False):
+        effective_date = r.date
+        p = float(r.coef_t1)
+        if not 0 <= p <= 1:
+            raise RuntimeError(f'港股仓位系数越界：{effective_date.date()}={p}')
+        cell = str(r.cell_lag1) if pd.notna(r.cell_lag1) and r.cell_lag1 else None
+        label_date = label_asof(previous_date or effective_date)
+        if cell is None:
+            status = '无标签回退1.0'
+        elif label_date is not None and previous_date is not None and label_date < previous_date:
+            status = '沿用历史标签'
+        else:
+            status = '正常'
+        rows.append([effective_date.strftime('%Y-%m-%d'), p, cell,
+                     previous_date.strftime('%Y-%m-%d') if previous_date is not None else None,
+                     label_date.strftime('%Y-%m-%d') if label_date is not None else None,
+                     status])
+        rp = rp_daily.get(effective_date.strftime('%Y-%m-%d'))
+        if rp is not None and abs(p - rp['p'][1]) > 1e-6:
+            raise RuntimeError(f'港股 p_hk 与 rp_daily 不一致：{effective_date.date()}')
+        previous_date = effective_date
+
+    latest_label_date = label_days[-1]
+    latest_cell = str(label_by_day[latest_label_date])
+    latest_signal = {
+        'date': latest_label_date.strftime('%Y-%m-%d'),
+        'cell': latest_cell,
+        'coef': float(coef_map.get(latest_cell, 1.0)),
+        'effective_date': '次交易日',
+    }
+    if signals:
+        pre_date = max(signals)
+        pre = signals[pre_date]
+        if pre_date == latest_signal['date']:
+            pre_p = float(pre['rp_info']['p']['p_hk'])
+            if abs(pre_p - latest_signal['coef']) > 1e-6:
+                raise RuntimeError('港股最新信号系数与 precompute p_hk 不一致')
+            latest_signal['effective_date'] = pre['t1_date']
+    return {'rows': rows, 'latest_signal': latest_signal, 'coef_map': coef_map}
+
+
 def build_beta_z():
     """袖最终 beta/Z 信号参数：A股、全球及商品五腿；使用信号计算日。"""
     commodity_states = ROOT / '09_商品' / '商品择时2.0_N5组合回测' / 'states'
@@ -364,6 +432,7 @@ def main():
     signals = build_signals()
     reference_benchmarks = build_reference_benchmarks(ROOT, nav_dates)
     beta_z = build_beta_z()
+    hk_timing = build_hk_timing(rp_daily, signals)
 
     data = {
         'names': names, 'metrics': metrics, 'nav': nav_series,
@@ -371,6 +440,7 @@ def main():
         'reference_benchmarks': reference_benchmarks,
         'positions': positions, 'a_stock_detail': a_detail, 'rp_daily': rp_daily,
         'rebal_dates': rebal_dates, 'signals': signals, 'beta_z': beta_z,
+        'hk_timing': hk_timing,
     }
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text('window.STRATEGY_DATA = '

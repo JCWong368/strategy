@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>风险平价2.0 策略展示</title>
 <script src="echarts.min.js"></script>
-<script src="data.js?v=1793830326"></script>
+<script src="data.js?v=1793843050"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f4f6fa; color: #2b3445; padding: 16px; }
@@ -38,6 +38,14 @@
   .toolbar select { padding: 4px 8px; border: 1px solid #d0d7e2; border-radius: 5px; font-size: 13px; background: #fff; }
   .toolbar button.on { background: #5470c6; border-color: #5470c6; color: #fff; }
   @media (max-width: 900px) { .bz-charts { grid-template-columns: 1fr; } }
+  .hk-current { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: 8px 0 12px; }
+  .hk-current .big { font-size: 32px; font-weight: 700; color: #5470c6; }
+  .hk-current .cell { font-size: 17px; font-weight: 600; }
+  .hk-chart { width: 100%; height: 320px; }
+  .hk-state-band { display: flex; width: 100%; height: 22px; overflow: hidden; border-radius: 4px; margin: 4px 0; }
+  .hk-state-seg { min-width: 1px; height: 100%; }
+  .hk-legend { display: flex; flex-wrap: wrap; gap: 5px 10px; font-size: 10px; color: #5a6a85; margin: 5px 0 8px; }
+  .hk-swatch { display: inline-block; width: 9px; height: 9px; margin-right: 3px; border-radius: 2px; }
   .ref-warning { color: #a04700; background: #fff7e8; border: 1px solid #f0d7ae; border-radius: 6px; padding: 9px 11px; font-size: 13px; line-height: 1.7; margin-bottom: 8px; }
   .ref-note { color: #5a6a85; font-size: 12px; line-height: 1.8; }
   .table-wrap { width: 100%; overflow-x: auto; }
@@ -132,6 +140,37 @@
     <div id="chart_beta" class="bz-chart"></div>
     <div id="chart_z" class="bz-chart"></div>
   </div>
+</div>
+
+<div class="panel">
+  <h2>港股袖 · 九态择时仓位系数（当前与历史）</h2>
+  <div class="ref-note">
+    p_hk 是港股袖自身的仓位系数，不是占总资产比例；100% 仅表示港股袖满仓。
+    九态标签 → 映射系数 → T+1 生效；历史图以生效日为横轴，并保留信号日及标签日。
+  </div>
+  <div class="hk-current" id="hk_current"></div>
+  <div class="grid2">
+    <div><h2>当前生效</h2><div id="hk_effective"></div></div>
+    <div><h2>最新信号（目标 T+1）</h2><div id="hk_signal"></div></div>
+  </div>
+  <details class="year-block">
+    <summary><b>九态 → 仓位系数映射与状态色</b>（点击展开）</summary>
+    <div id="hk_mapping"></div>
+  </details>
+  <div class="toolbar">
+    <span class="sub" style="margin:0">历史时间轴：</span>
+    <button data-hk-window="60">60日</button>
+    <button data-hk-window="250" class="on">250日</button>
+    <button data-hk-window="0">全部</button>
+  </div>
+  <div class="ref-note" style="margin-bottom:4px">九态状态色带（与下方系数图同为生效日口径）</div>
+  <div class="hk-state-band" id="hk_state_band"></div>
+  <div class="hk-legend" id="hk_legend"></div>
+  <div id="chart_hk_coef" class="hk-chart"></div>
+  <details class="year-block">
+    <summary><b>系数变化 / 状态迁移记录</b>（最近20次，点击展开）</summary>
+    <div class="table-wrap" id="hk_events"></div>
+  </details>
 </div>
 
 <div class="panel">
@@ -468,6 +507,116 @@ document.querySelectorAll("[data-bz-window]").forEach(btn => {
 renderBetaZCards();
 renderBetaZ();
 
+// ---------- 港股袖九态仓位系数 ----------
+const hkData = D.hk_timing || { rows: [], coef_map: {} };
+const hkRows = hkData.rows || [];
+const hkColors = {
+  "震荡×高波": "#c43c39", "震荡×中波": "#e89b5b", "震荡×低波": "#f1d38a",
+  "下跌趋势×高波": "#8e4a9e", "下跌趋势×中波": "#6a6f8f", "下跌趋势×低波": "#4d6c8a",
+  "上涨趋势×高波": "#d65f5f", "上涨趋势×中波": "#91cc75", "上涨趋势×低波": "#3d9b73",
+};
+const hkChart = echarts.init(document.getElementById("chart_hk_coef"));
+let hkWindow = 250;
+
+function renderHkCurrent(){
+  if (!hkRows.length) return;
+  const last = hkRows[hkRows.length - 1];
+  let stateDays = 0;
+  for (let i = hkRows.length - 1; i >= 0 && hkRows[i][2] === last[2]; i--) stateDays++;
+  let sinceChange = 0;
+  for (let i = hkRows.length - 2; i >= 0; i--) {
+    if (hkRows[i][1] !== last[1]) break;
+    sinceChange++;
+  }
+  document.getElementById("hk_current").innerHTML =
+    `<span class="big">${pct(last[1], 0)}</span><span class="cell">${last[2] || "无标签"}</span>`
+    + `<span class="tag">同状态 ${stateDays} 日</span><span class="tag">系数已 ${sinceChange} 日未变</span>`;
+  document.getElementById("hk_effective").innerHTML =
+    `<div class="kv"><b>生效日</b>${last[0]}　<b>p_hk</b>${pct(last[1], 0)}</div>`
+    + `<div class="kv"><b>九态</b>${last[2] || "—"}</div>`
+    + `<div class="kv"><b>信号日</b>${last[3] || "—"}　<b>标签日</b>${last[4] || "—"}</div>`
+    + `<div class="kv"><b>数据状态</b><span class="tag">${last[5]}</span></div>`;
+  const sig = hkData.latest_signal || {};
+  document.getElementById("hk_signal").innerHTML =
+    `<div class="kv"><b>信号日</b>${sig.date || "—"}　<b>目标生效</b>${sig.effective_date || "次交易日"}</div>`
+    + `<div class="kv"><b>九态</b>${sig.cell || "—"}</div>`
+    + `<div class="kv"><b>映射系数</b><span style="font-size:22px;font-weight:700">${pct(sig.coef || 0, 0)}</span></div>`;
+  document.getElementById("hk_mapping").innerHTML =
+    `<table><tr><th class="l">九态</th><th>仓位系数</th></tr>`
+    + Object.entries(hkData.coef_map || {}).map(([cell, coef]) =>
+      `<tr><td class="l"><span class="hk-swatch" style="background:${hkColors[cell] || "#c0c8d4"}"></span>${cell}</td><td>${pct(coef, 0)}</td></tr>`).join("")
+    + `</table>`;
+}
+
+function hkViewRows(){
+  return hkWindow ? hkRows.slice(-hkWindow) : hkRows;
+}
+
+function renderHkStateBand(rows){
+  const segments = [];
+  let start = 0;
+  for (let i = 1; i <= rows.length; i++) {
+    if (i < rows.length && rows[i][2] === rows[start][2]) continue;
+    const cell = rows[start][2];
+    const days = i - start;
+    segments.push(`<div class="hk-state-seg" style="flex:${days};background:${hkColors[cell] || "#e2e8f0"}"`
+      + ` title="${rows[start][0]} ~ ${rows[i-1][0]}｜${cell || "无数据"}｜${days}日"></div>`);
+    start = i;
+  }
+  document.getElementById("hk_state_band").innerHTML = segments.join("");
+  document.getElementById("hk_legend").innerHTML = Object.entries(hkColors).map(([cell, color]) =>
+    `<span><i class="hk-swatch" style="background:${color}"></i>${cell}</span>`).join("");
+}
+
+function renderHkChart(){
+  const rows = hkViewRows();
+  renderHkStateBand(rows);
+  hkChart.setOption({
+    animation: false,
+    tooltip: { trigger: "axis", axisPointer: { type: "cross" },
+      formatter: ps => {
+        if (!ps.length) return "";
+        const r = rows[ps[0].dataIndex];
+        return r ? `${r[0]}<br>p_hk：<b>${pct(r[1], 0)}</b><br>九态：${r[2] || "—"}`
+          + `<br>信号日：${r[3] || "—"}<br>标签日：${r[4] || "—"}<br>状态：${r[5]}` : "";
+      } },
+    grid: { left: 55, right: 20, top: 28, bottom: 50 },
+    xAxis: { type: "time" },
+    yAxis: { type: "value", min: 0, max: 1, name: "p_hk",
+             axisLabel: { formatter: v => `${(v*100).toFixed(0)}%` } },
+    dataZoom: [{ type: "inside" }, { type: "slider", bottom: 5, height: 20 }],
+    series: [{ name: "p_hk", type: "line", step: "start", showSymbol: false,
+      connectNulls: false, color: "#5470c6", lineStyle: { width: 2 },
+      areaStyle: { opacity: .10 }, data: rows.map(r => [r[0], r[1]]) }],
+  }, true);
+}
+
+function renderHkEvents(){
+  const events = [];
+  for (let i = 1; i < hkRows.length; i++) {
+    if (hkRows[i][1] !== hkRows[i-1][1] || hkRows[i][2] !== hkRows[i-1][2]) {
+      events.push([hkRows[i][0], hkRows[i][2], hkRows[i-1][1], hkRows[i][1], hkRows[i][3]]);
+    }
+  }
+  const recent = events.slice(-20).reverse();
+  document.getElementById("hk_events").innerHTML =
+    `<table><tr><th class="l">生效日</th><th class="l">九态</th><th>原系数</th><th>新系数</th><th class="l">信号日</th></tr>`
+    + recent.map(r => `<tr><td class="l">${r[0]}</td><td class="l">${r[1] || "—"}</td>`
+      + `<td>${pct(r[2], 0)}</td><td>${pct(r[3], 0)}</td><td class="l">${r[4] || "—"}</td></tr>`).join("")
+    + `</table>`;
+}
+
+document.querySelectorAll("[data-hk-window]").forEach(btn => {
+  btn.onclick = () => {
+    hkWindow = +btn.dataset.hkWindow;
+    document.querySelectorAll("[data-hk-window]").forEach(b => b.classList.toggle("on", b === btn));
+    renderHkChart();
+  };
+});
+renderHkCurrent();
+renderHkChart();
+renderHkEvents();
+
 // ---------- 日期详情 ----------
 let curIdx = nearestIdx(D.metrics.end);   // 默认最后回测日；最新 precompute 在下方独立面板
 const pick = document.getElementById("datepick");
@@ -582,6 +731,7 @@ renderLatestPre();
 
 window.addEventListener("resize", () => {
   navChart.resize(); refChart.resize(); wChart.resize(); betaChart.resize(); zChart.resize();
+  hkChart.resize();
 });
 </script>
 </body>
