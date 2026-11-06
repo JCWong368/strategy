@@ -10,6 +10,7 @@
   rebal_dates    —— 季度重估日列表（净值图标注用）
   signals        —— precompute 信号（含 T+1 目标持仓，最新数据日及其后）
   beta_z         —— A股、全球、商品五腿的 beta/Z/状态历史（信号计算日）
+  a_environment  —— A股九态环境、系数及回退状态历史（环境标签日）
   hk_timing      —— 港股九态仓位系数历史（生效日）与最新信号（标签日）
 自校验：每日 ETF 权重合计 ≈ 四袖仓位+bond_pos（容差 1e-6，超限打印 WARN）；
         beta/Z 与 A/B/C/D 状态象限逐日一致；港股 p_hk 与 rp_daily/precompute
@@ -236,6 +237,44 @@ def build_signals():
     return signals
 
 
+def build_a_environment():
+    """A股九态环境：标签日历史、系数映射及预热/缺失回退标记。"""
+    a9_source = (ROOT / '择时改进探索' / '08_九格系数替代四态_A股子策略'
+                 / 'run_backtest.py').read_text(encoding='utf-8')
+    coef_map = None
+    for node in ast.parse(a9_source).body:
+        if isinstance(node, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == 'JOINT9_COEF' for t in node.targets):
+            coef_map = ast.literal_eval(node.value)
+            break
+    if coef_map is None:
+        raise RuntimeError('无法读取A股九格 JOINT9_COEF 单一事实源')
+
+    path = ROOT / '市场环境' / 'timeseries' / 'env_labels_main.csv'
+    env = pd.read_csv(path, encoding='utf-8-sig', parse_dates=['date'])
+    env = env.sort_values('date').drop_duplicates('date', keep='last')
+    first_valid = env.loc[env['joint9'].isin(coef_map), 'date'].min()
+    rows = []
+    for r in env.itertuples(index=False):
+        cell = str(r.joint9) if pd.notna(r.joint9) and r.joint9 else None
+        valid = cell in coef_map
+        if valid:
+            parts = cell.split('×')
+            if len(parts) != 2 or parts[0] != r.M1d or parts[1] != r.M2:
+                raise RuntimeError(f'A股九态与 M1d/M2 不一致：{r.date.date()}={cell}')
+            coef = float(coef_map[cell])
+            status = '正常'
+        else:
+            coef = None
+            status = ('预热期·回退原环境系数' if r.date < first_valid
+                      else '九格缺失·回退原环境系数')
+        rows.append([r.date.strftime('%Y-%m-%d'), cell,
+                     str(r.M1d) if pd.notna(r.M1d) else None,
+                     str(r.M2) if pd.notna(r.M2) else None, coef, status])
+    return {'rows': rows, 'coef_map': coef_map,
+            'source_end': env['date'].max().strftime('%Y-%m-%d')}
+
+
 def build_hk_timing(rp_daily, signals):
     """港股九态仓位系数：历史按生效日，最新信号按标签日；只读上游产物。"""
     from bisect import bisect_right
@@ -432,6 +471,7 @@ def main():
     signals = build_signals()
     reference_benchmarks = build_reference_benchmarks(ROOT, nav_dates)
     beta_z = build_beta_z()
+    a_environment = build_a_environment()
     hk_timing = build_hk_timing(rp_daily, signals)
 
     data = {
@@ -440,7 +480,7 @@ def main():
         'reference_benchmarks': reference_benchmarks,
         'positions': positions, 'a_stock_detail': a_detail, 'rp_daily': rp_daily,
         'rebal_dates': rebal_dates, 'signals': signals, 'beta_z': beta_z,
-        'hk_timing': hk_timing,
+        'a_environment': a_environment, 'hk_timing': hk_timing,
     }
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text('window.STRATEGY_DATA = '

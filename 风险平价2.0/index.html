@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>风险平价2.0 策略展示</title>
 <script src="echarts.min.js"></script>
-<script src="data.js?v=1793916360"></script>
+<script src="data.js?v=1793933694"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f4f6fa; color: #2b3445; padding: 16px; }
@@ -44,6 +44,9 @@
   .hk-chart { width: 100%; height: 320px; }
   .hk-state-band { display: flex; width: 100%; height: 22px; overflow: hidden; border-radius: 4px; margin: 4px 0; }
   .hk-state-seg { min-width: 1px; height: 100%; }
+  .hk-state-band.thin { height: 12px; }
+  .aenv-band-row { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
+  .aenv-band-row > span { width: 32px; flex: 0 0 32px; font-size: 11px; color: #5a6a85; }
   .hk-legend { display: flex; flex-wrap: wrap; gap: 5px 10px; font-size: 10px; color: #5a6a85; margin: 5px 0 8px; }
   .hk-swatch { display: inline-block; width: 9px; height: 9px; margin-right: 3px; border-radius: 2px; }
   .ref-warning { color: #a04700; background: #fff7e8; border: 1px solid #f0d7ae; border-radius: 6px; padding: 9px 11px; font-size: 13px; line-height: 1.7; margin-bottom: 8px; }
@@ -140,6 +143,38 @@
     <div id="chart_beta" class="bz-chart"></div>
     <div id="chart_z" class="bz-chart"></div>
   </div>
+</div>
+
+<div class="panel">
+  <h2>A股袖 · 九态环境状态（当前与历史）</h2>
+  <div class="ref-note">
+    九态环境 = 五宽基等权口径 M1d方向 × M2波档；环境系数进入 A股目标系数 =
+    min(N20固定系数 × 九态环境系数, 1)。本面板历史横轴为环境标签日，不做T+1位移。
+  </div>
+  <div class="hk-current" id="aenv_current"></div>
+  <div class="grid2">
+    <div><h2>当前环境</h2><div id="aenv_effective"></div></div>
+    <div><h2>在策略中的作用</h2><div id="aenv_role"></div></div>
+  </div>
+  <details class="year-block">
+    <summary><b>九态 → 环境系数映射与状态色</b>（点击展开）</summary>
+    <div id="aenv_mapping"></div>
+  </details>
+  <div class="toolbar">
+    <span class="sub" style="margin:0">历史时间轴：</span>
+    <button data-aenv-window="60">60日</button>
+    <button data-aenv-window="250" class="on">250日</button>
+    <button data-aenv-window="0">全部</button>
+  </div>
+  <div class="aenv-band-row"><span>九态</span><div class="hk-state-band" id="aenv_state_band"></div></div>
+  <div class="aenv-band-row"><span>方向</span><div class="hk-state-band thin" id="aenv_direction_band"></div></div>
+  <div class="aenv-band-row"><span>波档</span><div class="hk-state-band thin" id="aenv_wave_band"></div></div>
+  <div class="hk-legend" id="aenv_legend"></div>
+  <div id="chart_aenv_coef" class="hk-chart"></div>
+  <details class="year-block">
+    <summary><b>环境状态 / 系数迁移记录</b>（最近20次，点击展开）</summary>
+    <div class="table-wrap" id="aenv_events"></div>
+  </details>
 </div>
 
 <div class="panel">
@@ -507,6 +542,117 @@ document.querySelectorAll("[data-bz-window]").forEach(btn => {
 renderBetaZCards();
 renderBetaZ();
 
+// ---------- A股袖九态环境状态 ----------
+const aenvData = D.a_environment || { rows: [], coef_map: {} };
+const aenvRows = aenvData.rows || [];
+const aenvColors = {
+  "震荡×高波": "#c43c39", "震荡×中波": "#e89b5b", "震荡×低波": "#f1d38a",
+  "下跌趋势×高波": "#8e4a9e", "下跌趋势×中波": "#6a6f8f", "下跌趋势×低波": "#4d6c8a",
+  "上涨趋势×高波": "#d65f5f", "上涨趋势×中波": "#91cc75", "上涨趋势×低波": "#3d9b73",
+};
+const aenvDirectionColors = { "上涨趋势": "#3d9b73", "下跌趋势": "#4d6c8a", "震荡": "#e89b5b" };
+const aenvWaveColors = { "高波": "#c43c39", "中波": "#e89b5b", "低波": "#4d6c8a" };
+const aenvChart = echarts.init(document.getElementById("chart_aenv_coef"));
+const aenvPct = v => v == null ? "—" : pct(v, 0);
+let aenvWindow = 250;
+
+function renderAenvCurrent(){
+  const valid = aenvRows.filter(r => r[1] != null);
+  if (!valid.length) return;
+  const last = valid[valid.length - 1];
+  let stateDays = 0;
+  for (let i = aenvRows.length - 1; i >= 0 && aenvRows[i][1] === last[1]; i--) stateDays++;
+  let sinceChange = 0;
+  for (let i = aenvRows.length - 2; i >= 0; i--) {
+    if (aenvRows[i][4] !== last[4]) break;
+    sinceChange++;
+  }
+  document.getElementById("aenv_current").innerHTML =
+    `<span class="big">${aenvPct(last[4])}</span><span class="cell">${last[1]}</span>`
+    + `<span class="tag">同状态 ${stateDays} 日</span><span class="tag">系数已 ${sinceChange} 日未变</span>`;
+  document.getElementById("aenv_effective").innerHTML =
+    `<div class="kv"><b>环境标签日</b>${last[0]}　<b>环境系数</b>${aenvPct(last[4])}</div>`
+    + `<div class="kv"><b>M1d方向</b>${last[2] || "—"}　<b>M2波档</b>${last[3] || "—"}</div>`
+    + `<div class="kv"><b>数据状态</b><span class="tag">${last[5]}</span></div>`
+    + `<div class="kv"><b>源文件末日</b>${aenvData.source_end || "—"}</div>`;
+  document.getElementById("aenv_role").innerHTML =
+    `<div class="kv"><b>计算关系</b>N20固定系数 × 九态环境系数，最高截断至1</div>`
+    + `<div class="kv"><b>执行时点</b>T日环境标签进入T+1目标计算；本面板不后移环境历史</div>`
+    + `<div class="kv"><b>缺失口径</b>预热或九格缺失时回退原环境系数，不在本面板填造九态或系数</div>`;
+  document.getElementById("aenv_mapping").innerHTML =
+    `<table><tr><th class="l">九态</th><th>环境系数</th></tr>`
+    + Object.entries(aenvData.coef_map || {}).map(([cell, coef]) =>
+      `<tr><td class="l"><span class="hk-swatch" style="background:${aenvColors[cell] || "#c0c8d4"}"></span>${cell}</td><td>${pct(coef, 0)}</td></tr>`).join("")
+    + `</table>`;
+}
+
+function renderAenvBand(elementId, rows, valueIndex, colors){
+  const segments = [];
+  let start = 0;
+  for (let i = 1; i <= rows.length; i++) {
+    if (i < rows.length && rows[i][valueIndex] === rows[start][valueIndex]) continue;
+    const value = rows[start][valueIndex];
+    const days = i - start;
+    segments.push(`<div class="hk-state-seg" style="flex:${days};background:${colors[value] || "#e2e8f0"}"`
+      + ` title="${rows[start][0]} ~ ${rows[i-1][0]}｜${value || "无数据"}｜${days}日"></div>`);
+    start = i;
+  }
+  document.getElementById(elementId).innerHTML = segments.join("");
+}
+
+function renderAenvChart(){
+  const rows = aenvWindow ? aenvRows.slice(-aenvWindow) : aenvRows;
+  renderAenvBand("aenv_state_band", rows, 1, aenvColors);
+  renderAenvBand("aenv_direction_band", rows, 2, aenvDirectionColors);
+  renderAenvBand("aenv_wave_band", rows, 3, aenvWaveColors);
+  document.getElementById("aenv_legend").innerHTML = Object.entries(aenvColors).map(([cell, color]) =>
+    `<span><i class="hk-swatch" style="background:${color}"></i>${cell}</span>`).join("");
+  aenvChart.setOption({
+    animation: false,
+    tooltip: { trigger: "axis", axisPointer: { type: "cross" },
+      formatter: ps => {
+        if (!ps.length) return "";
+        const r = rows[ps[0].dataIndex];
+        return r ? `${r[0]}<br>环境系数：<b>${aenvPct(r[4])}</b><br>九态：${r[1] || "—"}`
+          + `<br>M1d：${r[2] || "—"}　M2：${r[3] || "—"}<br>状态：${r[5]}` : "";
+      } },
+    grid: { left: 55, right: 20, top: 28, bottom: 50 },
+    xAxis: { type: "time" },
+    yAxis: { type: "value", min: 0, max: 1, name: "环境系数",
+             axisLabel: { formatter: v => `${(v*100).toFixed(0)}%` } },
+    dataZoom: [{ type: "inside" }, { type: "slider", bottom: 5, height: 20 }],
+    series: [{ name: "环境系数", type: "line", step: "start", showSymbol: false,
+      connectNulls: false, color: "#5470c6", lineStyle: { width: 2 },
+      areaStyle: { opacity: .10 }, data: rows.map(r => [r[0], r[4]]) }],
+  }, true);
+}
+
+function renderAenvEvents(){
+  const events = [];
+  for (let i = 1; i < aenvRows.length; i++) {
+    if (aenvRows[i][1] !== aenvRows[i-1][1] || aenvRows[i][4] !== aenvRows[i-1][4]) {
+      events.push([aenvRows[i][0], aenvRows[i-1][1], aenvRows[i][1],
+                   aenvRows[i-1][4], aenvRows[i][4]]);
+    }
+  }
+  document.getElementById("aenv_events").innerHTML =
+    `<table><tr><th class="l">标签日</th><th class="l">原状态</th><th class="l">新状态</th><th>原系数</th><th>新系数</th></tr>`
+    + events.slice(-20).reverse().map(r => `<tr><td class="l">${r[0]}</td><td class="l">${r[1] || "—"}</td>`
+      + `<td class="l">${r[2] || "—"}</td><td>${aenvPct(r[3])}</td><td>${aenvPct(r[4])}</td></tr>`).join("")
+    + `</table>`;
+}
+
+document.querySelectorAll("[data-aenv-window]").forEach(btn => {
+  btn.onclick = () => {
+    aenvWindow = +btn.dataset.aenvWindow;
+    document.querySelectorAll("[data-aenv-window]").forEach(b => b.classList.toggle("on", b === btn));
+    renderAenvChart();
+  };
+});
+renderAenvCurrent();
+renderAenvChart();
+renderAenvEvents();
+
 // ---------- 港股袖九态仓位系数 ----------
 const hkData = D.hk_timing || { rows: [], coef_map: {} };
 const hkRows = hkData.rows || [];
@@ -731,7 +877,7 @@ renderLatestPre();
 
 window.addEventListener("resize", () => {
   navChart.resize(); refChart.resize(); wChart.resize(); betaChart.resize(); zChart.resize();
-  hkChart.resize();
+  aenvChart.resize(); hkChart.resize();
 });
 </script>
 </body>
