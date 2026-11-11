@@ -5,8 +5,8 @@
 数据块：
   names / metrics / nav / weights / benchmarks        —— 与 macro407 同 schema
   reference_benchmarks —— 四条独立满仓基准（由原始行情构建，含指标与数据质量）
-  standalone_strategies —— 四子策略原生独立净值、择时仓位、绩效与分年收益
-                           （含择时；不乘RP权重、不加共享池或国债）
+  standalone_strategies —— 子策略原生独立净值、择时仓位、绩效与分年收益
+                           （含A股仅N20对照；不乘RP权重、不加共享池或国债）
   positions      —— 每日 ETF 持仓（组合层权重，回测生效口径）
   rp_daily       —— RP 底座生效权重 w_eff + 池借款 borrow + 池快照 S/D/tight
   rebal_dates    —— 季度重估日列表（净值图标注用）
@@ -344,16 +344,25 @@ def build_hk_timing(rp_daily, signals):
 
 
 def build_standalone_strategies(root: Path, nav_dates, rp_daily) -> dict:
-    """四子策略原生独立净值：含各自择时，不乘RP权重、不加共享池或国债。"""
+    """子策略原生独立净值：含各自择时，不乘RP权重、不加共享池或国债。"""
     annual_days = 244
     specs = {
         'a': {
-            'name': 'A股九格子策略', 'short_name': 'A股', 'p_index': 0,
+            'name': 'A股九格子策略', 'short_name': 'A股九格', 'p_index': 0,
             'path': root / '择时改进探索/08_九格系数替代四态_A股子策略/output/nav_curve.csv',
             'nav_col': 'combo_nav', 'p_col': 'w_a_stock',
             'source': '择时改进探索/08_九格系数替代四态_A股子策略/output/nav_curve.csv',
             'definition': '行业轮动选股与slot执行，叠加N20四态固定系数×九态环境系数，独立满仓上限运行。',
             'notes': ['原生净值已含交易费用与现金收益；九态映射为样本内设定。'],
+        },
+        'a_n20': {
+            'name': 'A股仅N20四态子策略', 'short_name': 'A股仅N20', 'p_index': None,
+            'path': root / '择时改进探索/08_九格系数替代四态_A股子策略/output_n20_only/nav_curve.csv',
+            'nav_col': 'combo_nav', 'p_col': 'w_a_stock',
+            'source': '择时改进探索/08_九格系数替代四态_A股子策略/output_n20_only/nav_curve.csv',
+            'definition': '与A股九格版共用行业选股、slot执行和暴冲过滤；仓位仅取N20四态B=1/A=0.7/D=0.5/C=0，不叠加M1×M2或九态环境系数。',
+            'notes': ['原生净值已含交易费用与现金收益；四态固定系数为样本内指定。',
+                      '这是RP2.0九格A股袖的对照策略，不要求其仓位与rp_daily.p_a一致。'],
         },
         'hk': {
             'name': '港股通九态子策略', 'short_name': '港股', 'p_index': 1,
@@ -400,7 +409,7 @@ def build_standalone_strategies(root: Path, nav_dates, rp_daily) -> dict:
     common_end = min([dates.max()] + [raw.index.max() for raw in raw_items.values()])
     target_dates = dates[dates <= common_end]
     if not len(target_dates):
-        raise RuntimeError('四子策略与风险平价2.0没有共同展示日期')
+        raise RuntimeError('子策略与风险平价2.0没有共同展示日期')
     result = {
         'window': {'start': str(target_dates[0].date()), 'end': str(target_dates[-1].date())},
         'annual_days': annual_days,
@@ -439,12 +448,13 @@ def build_standalone_strategies(root: Path, nav_dates, rp_daily) -> dict:
             yearly[str(year)] = round(float((1.0 + group).prod() - 1.0), 4)
 
         p_diffs = []
-        for dt, p in aligned['p'].dropna().items():
-            day = str(dt.date())
-            if day in rp_daily:
-                p_diffs.append(abs(float(p) - float(rp_daily[day]['p'][spec['p_index']])))
-        max_p_diff = max(p_diffs, default=0.0)
-        if max_p_diff > 1e-6:
+        if spec['p_index'] is not None:
+            for dt, p in aligned['p'].dropna().items():
+                day = str(dt.date())
+                if day in rp_daily:
+                    p_diffs.append(abs(float(p) - float(rp_daily[day]['p'][spec['p_index']])))
+        max_p_diff = max(p_diffs, default=0.0) if spec['p_index'] is not None else None
+        if max_p_diff is not None and max_p_diff > 1e-6:
             raise RuntimeError(f'{spec["name"]}独立择时仓位与rp_daily不一致：{max_p_diff}')
         missing_dates = [str(d.date()) for d in aligned.index[aligned['nav'].isna()]]
         result['items'][key] = {
@@ -595,7 +605,9 @@ def main():
     rp_daily, rebal_dates = build_rp_daily(nav)
     standalone = build_standalone_strategies(ROOT, nav_dates, rp_daily)
     print(f'[独立绩效] {standalone["window"]["start"]} ~ {standalone["window"]["end"]} | '
-          + ' | '.join(f'{v["short_name"]} p核对 {v["data_quality"]["timing_max_abs_diff_vs_rp"]:.1e}'
+          + ' | '.join(v['short_name'] + ' p核对 '
+                       + (f'{v["data_quality"]["timing_max_abs_diff_vs_rp"]:.1e}'
+                          if v['data_quality']['timing_max_abs_diff_vs_rp'] is not None else '不适用')
                        for v in standalone['items'].values()))
     signals = build_signals()
     reference_benchmarks = build_reference_benchmarks(ROOT, nav_dates)

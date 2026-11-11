@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>风险平价2.0 策略展示</title>
 <script src="echarts.min.js"></script>
-<script src="data.js?v=1794366486"></script>
+<script src="data.js?v=1794386393"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f4f6fa; color: #2b3445; padding: 16px; }
@@ -103,7 +103,7 @@
 </div>
 
 <div class="panel">
-  <h2>四子策略独立运行表现（含择时，不含国债 / RP / 共享池）</h2>
+  <h2>子策略独立运行表现（含择时，不含国债 / RP / 共享池）</h2>
   <div class="ref-warning"><b>每条曲线都是子策略自身独立运行的原生回测净值，不乘风险平价权重、不使用共享池、不配置国债。</b>各策略保留原生费用与现金假设；全球袖为零手续费口径，港股为反事实系数叠加口径，横向比较须注意。与下方“满仓参考基准”不是同一对象。</div>
   <div class="toolbar">
     <label><input type="checkbox" id="standalone_log"> 对数坐标</label>
@@ -338,10 +338,10 @@ document.getElementById("logscale").onchange = () => navChart.setOption(navOptio
 document.getElementById("showred").onchange = () => navChart.setOption(navOption(), true);
 navChart.on("click", p => { if (p.value && p.value[0]) setDate(p.value[0]); });
 
-// ---------- 四子策略独立运行表现 ----------
+// ---------- 子策略独立运行表现 ----------
 const standaloneChart = echarts.init(document.getElementById("chart_standalone"));
 const standaloneEntries = Object.entries((D.standalone_strategies || {}).items || {});
-const standaloneColors = { a: "#5470c6", hk: "#91cc75", gl: "#ee6666", cmd: "#fac858" };
+const standaloneColors = { a: "#5470c6", a_n20: "#9b59b6", hk: "#91cc75", gl: "#ee6666", cmd: "#fac858" };
 function standaloneOption() {
   const series = standaloneEntries.map(([key, item]) => ({
     name: item.short_name, type: "line", showSymbol: false, connectNulls: false,
@@ -420,7 +420,9 @@ document.getElementById("standalone_rp").onchange = () => standaloneChart.setOpt
         + `<div class="kv"><b>定义</b>${item.definition}</div>`
         + `<div class="kv"><b>来源</b><code>${item.source}</code></div>`
         + q.notes.map(note => `<div>• ${note}</div>`).join("")
-        + `<div class="kv"><b>与RP择时仓位核验</b>${q.timing_compared_days}日，最大绝对差 ${q.timing_max_abs_diff_vs_rp.toExponential(2)}</div>`
+        + (q.timing_max_abs_diff_vs_rp == null
+           ? `<div class="kv"><b>与RP择时仓位核验</b>不适用：这是RP2.0九格A股袖的无环境系数对照策略</div>`
+           : `<div class="kv"><b>与RP择时仓位核验</b>${q.timing_compared_days}日，最大绝对差 ${q.timing_max_abs_diff_vs_rp.toExponential(2)}</div>`)
         + (q.missing_count ? `<div class="kv"><b>异常缺失</b>${q.missing_dates.join("、")}</div>` : `<div>无异常缺失。</div>`)
         + `</details>`;
     }).join("");
