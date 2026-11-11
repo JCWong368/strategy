@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>风险平价2.0 策略展示</title>
 <script src="echarts.min.js"></script>
-<script src="data.js?v=1794348717"></script>
+<script src="data.js?v=1794366486"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f4f6fa; color: #2b3445; padding: 16px; }
@@ -23,6 +23,7 @@
   .toolbar input[type=date] { padding: 4px 8px; border: 1px solid #d0d7e2; border-radius: 5px; font-size: 13px; }
   .toolbar label { font-size: 13px; color: #5a6a85; user-select: none; cursor: pointer; }
   #chart_nav { width: 100%; height: 460px; }
+  #chart_standalone { width: 100%; height: 430px; }
   #chart_w { width: 100%; height: 280px; }
   #chart_hp { width: 100%; height: 300px; }
   #chart_ref { width: 100%; height: 390px; }
@@ -99,6 +100,20 @@
     <label><input type="checkbox" id="showred"> 标注季度重估日</label>
   </div>
   <div id="chart_nav"></div>
+</div>
+
+<div class="panel">
+  <h2>四子策略独立运行表现（含择时，不含国债 / RP / 共享池）</h2>
+  <div class="ref-warning"><b>每条曲线都是子策略自身独立运行的原生回测净值，不乘风险平价权重、不使用共享池、不配置国债。</b>各策略保留原生费用与现金假设；全球袖为零手续费口径，港股为反事实系数叠加口径，横向比较须注意。与下方“满仓参考基准”不是同一对象。</div>
+  <div class="toolbar">
+    <label><input type="checkbox" id="standalone_log"> 对数坐标</label>
+    <label><input type="checkbox" id="standalone_rp"> 叠加风险平价2.0参照（默认关闭）</label>
+  </div>
+  <div id="chart_standalone"></div>
+  <div class="table-wrap" id="standalone_metrics"></div>
+  <h2 style="margin-top:16px">分年度收益（按各子策略独立日收益复合）</h2>
+  <div class="table-wrap" id="standalone_yearly"></div>
+  <div class="ref-note" id="standalone_notes" style="margin-top:10px"></div>
 </div>
 
 <div class="panel">
@@ -322,6 +337,94 @@ navChart.setOption(navOption());
 document.getElementById("logscale").onchange = () => navChart.setOption(navOption(), true);
 document.getElementById("showred").onchange = () => navChart.setOption(navOption(), true);
 navChart.on("click", p => { if (p.value && p.value[0]) setDate(p.value[0]); });
+
+// ---------- 四子策略独立运行表现 ----------
+const standaloneChart = echarts.init(document.getElementById("chart_standalone"));
+const standaloneEntries = Object.entries((D.standalone_strategies || {}).items || {});
+const standaloneColors = { a: "#5470c6", hk: "#91cc75", gl: "#ee6666", cmd: "#fac858" };
+function standaloneOption() {
+  const series = standaloneEntries.map(([key, item]) => ({
+    name: item.short_name, type: "line", showSymbol: false, connectNulls: false,
+    color: standaloneColors[key], lineStyle: { width: 1.7 },
+    data: item.series,
+  }));
+  if (document.getElementById("standalone_rp").checked) {
+    series.push({
+      name: "风险平价2.0参照", type: "line", showSymbol: false, connectNulls: false,
+      color: "#606c80", lineStyle: { width: 1.4, type: "dashed" },
+      data: D.nav.map(r => [r[0], r[1]]),
+    });
+  }
+  return {
+    animation: false,
+    tooltip: { trigger: "axis", axisPointer: { type: "cross" },
+      formatter: ps => {
+        if (!ps.length) return "";
+        let s = ps[0].axisValue;
+        ps.forEach(p => {
+          const v = p.value || [];
+          if (p.seriesName === "风险平价2.0参照") {
+            s += `<br>${p.marker}${p.seriesName}: <b>${v[1] == null ? "-" : (+v[1]).toFixed(4)}</b>`;
+          } else {
+            const nav = v[1] == null ? "缺失" : (+v[1]).toFixed(4);
+            const ret = v[2] == null ? "-" : pct(v[2], 2);
+            const exposure = v[3] == null ? "-" : pct(v[3], 0);
+            s += `<br>${p.marker}${p.seriesName}: <b>${nav}</b>｜日收益 ${ret}｜择时仓位 ${exposure}`;
+          }
+        });
+        return s;
+      }},
+    legend: { top: 0, type: "scroll" },
+    grid: { left: 60, right: 24, top: 45, bottom: 65 },
+    xAxis: { type: "time" },
+    yAxis: { type: document.getElementById("standalone_log").checked ? "log" : "value",
+             scale: true, name: "独立净值（首点=1）" },
+    dataZoom: [{ type: "inside" }, { type: "slider", bottom: 8, height: 22 }],
+    series,
+  };
+}
+standaloneChart.setOption(standaloneOption());
+document.getElementById("standalone_log").onchange = () => standaloneChart.setOption(standaloneOption(), true);
+document.getElementById("standalone_rp").onchange = () => standaloneChart.setOption(standaloneOption(), true);
+
+(function(){
+  let h = `<table><tr><th class="l">子策略</th><th>有效区间</th><th>日数</th><th>累计收益</th><th>年化收益</th><th>年化波动</th><th>Sharpe</th><th>最大回撤</th><th>卡玛</th><th>日胜率</th><th>平均择时仓位</th><th>异常缺失</th></tr>`;
+  standaloneEntries.forEach(([key, item]) => {
+    const m = item.metrics;
+    h += `<tr><td class="l"><b>${item.short_name}</b> ${item.name}</td><td>${m.start} ~ ${m.end}</td><td>${m.days}</td>`
+      + `<td class="${m.total_return>=0?'pos':'neg'}">${pct(m.total_return,2)}</td>`
+      + `<td class="${m.annual_return>=0?'pos':'neg'}">${pct(m.annual_return,2)}</td>`
+      + `<td>${pct(m.annual_vol,2)}</td><td>${m.sharpe.toFixed(3)}</td>`
+      + `<td class="neg">${pct(m.max_drawdown,2)}</td><td>${m.calmar ?? "-"}</td>`
+      + `<td>${pct(m.win_rate,1)}</td><td>${pct(m.avg_exposure,1)}</td>`
+      + `<td>${item.data_quality.missing_count}</td></tr>`;
+  });
+  document.getElementById("standalone_metrics").innerHTML = h + `</table>`;
+
+  const years = [...new Set(standaloneEntries.flatMap(([key, item]) => Object.keys(item.yearly)))].sort();
+  let y = `<table><tr><th class="l">子策略</th>${years.map(year => `<th>${year}</th>`).join("")}</tr>`;
+  standaloneEntries.forEach(([key, item]) => {
+    y += `<tr><td class="l"><b>${item.short_name}</b></td>${years.map(year => {
+      const value = item.yearly[year];
+      return value == null ? `<td>-</td>` : `<td class="${value>=0?'pos':'neg'}">${pct(value,2)}</td>`;
+    }).join("")}</tr>`;
+  });
+  document.getElementById("standalone_yearly").innerHTML = y + `</table>`;
+
+  const window = D.standalone_strategies.window;
+  document.getElementById("standalone_notes").innerHTML =
+    `<div><b>共同绩效窗口：</b>${window.start} ~ ${window.end}；年化按244个交易日，Sharpe无风险利率为0。</div>`
+    + standaloneEntries.map(([key, item]) => {
+      const q = item.data_quality;
+      return `<details class="year-block"><summary><b>${item.short_name}口径与数据质量</b>（源数据截至 ${item.source_end}，点击展开）</summary>`
+        + `<div class="kv"><b>定义</b>${item.definition}</div>`
+        + `<div class="kv"><b>来源</b><code>${item.source}</code></div>`
+        + q.notes.map(note => `<div>• ${note}</div>`).join("")
+        + `<div class="kv"><b>与RP择时仓位核验</b>${q.timing_compared_days}日，最大绝对差 ${q.timing_max_abs_diff_vs_rp.toExponential(2)}</div>`
+        + (q.missing_count ? `<div class="kv"><b>异常缺失</b>${q.missing_dates.join("、")}</div>` : `<div>无异常缺失。</div>`)
+        + `</details>`;
+    }).join("");
+})();
 
 // ---------- 满仓参考基准（独立展示）----------
 const refChart = echarts.init(document.getElementById("chart_ref"));
@@ -876,8 +979,8 @@ renderDetail();
 renderLatestPre();
 
 window.addEventListener("resize", () => {
-  navChart.resize(); refChart.resize(); wChart.resize(); betaChart.resize(); zChart.resize();
-  aenvChart.resize(); hkChart.resize();
+  navChart.resize(); standaloneChart.resize(); refChart.resize(); wChart.resize();
+  betaChart.resize(); zChart.resize(); aenvChart.resize(); hkChart.resize();
 });
 </script>
 </body>

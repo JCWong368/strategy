@@ -5,6 +5,8 @@
 数据块：
   names / metrics / nav / weights / benchmarks        —— 与 macro407 同 schema
   reference_benchmarks —— 四条独立满仓基准（由原始行情构建，含指标与数据质量）
+  standalone_strategies —— 四子策略原生独立净值、择时仓位、绩效与分年收益
+                           （含择时；不乘RP权重、不加共享池或国债）
   positions      —— 每日 ETF 持仓（组合层权重，回测生效口径）
   rp_daily       —— RP 底座生效权重 w_eff + 池借款 borrow + 池快照 S/D/tight
   rebal_dates    —— 季度重估日列表（净值图标注用）
@@ -341,6 +343,129 @@ def build_hk_timing(rp_daily, signals):
     return {'rows': rows, 'latest_signal': latest_signal, 'coef_map': coef_map}
 
 
+def build_standalone_strategies(root: Path, nav_dates, rp_daily) -> dict:
+    """四子策略原生独立净值：含各自择时，不乘RP权重、不加共享池或国债。"""
+    annual_days = 244
+    specs = {
+        'a': {
+            'name': 'A股九格子策略', 'short_name': 'A股', 'p_index': 0,
+            'path': root / '择时改进探索/08_九格系数替代四态_A股子策略/output/nav_curve.csv',
+            'nav_col': 'combo_nav', 'p_col': 'w_a_stock',
+            'source': '择时改进探索/08_九格系数替代四态_A股子策略/output/nav_curve.csv',
+            'definition': '行业轮动选股与slot执行，叠加N20四态固定系数×九态环境系数，独立满仓上限运行。',
+            'notes': ['原生净值已含交易费用与现金收益；九态映射为样本内设定。'],
+        },
+        'hk': {
+            'name': '港股通九态子策略', 'short_name': '港股', 'p_index': 1,
+            'path': root / '16_港股通/港股通九态系数择时/output/overlay_coef_v1.csv',
+            'nav_col': 'nav_overlay', 'p_col': 'coef_t1',
+            'source': '16_港股通/港股通九态系数择时/output/overlay_coef_v1.csv',
+            'definition': '港股通轮动底仓叠加九态仓位系数，按反事实现金分层口径独立运行。',
+            'notes': ['系数乘底仓整体日收益，并非精确分层持仓撮合；现金年化1%、单边费万0.55。',
+                      '九态映射为样本内人工设定。'],
+        },
+        'gl': {
+            'name': '全球组合指数择时子策略', 'short_name': '全球', 'p_index': 2,
+            'path': root / '10_全球/全球组合指数择时1.0_ETF对照/output/daily_B_指数信号+ETF交易.csv',
+            'nav_col': 'nav', 'p_col': 'pos',
+            'source': '10_全球/全球组合指数择时1.0_ETF对照/output/daily_B_指数信号+ETF交易.csv',
+            'definition': '四国指数N5信号驱动四只QDII ETF，T+1开盘执行，月调与系数变化日调仓。',
+            'notes': ['原生回测为零手续费口径，年换手较高，不可直接与其他扣费策略比较可交易性。',
+                      'QDII溢折价、汇率与跟踪误差已体现在ETF价格中，但不另建模型。'],
+        },
+        'cmd': {
+            'name': '商品环境1.2子策略', 'short_name': '商品', 'p_index': 3,
+            'path': root / '09_商品/商品环境1.2/output/allocation_daily.csv',
+            'nav_col': 'nav', 'p_col': 'total_position',
+            'source': '09_商品/商品环境1.2/output/allocation_daily.csv',
+            'definition': '商品五腿状态与环境系数分配，总仓位由在场腿平均有效系数决定，T+1开盘执行。',
+            'notes': ['原生净值已含单边万0.55费用，现金不计息；部分状态与环境系数为样本内设定。'],
+        },
+    }
+    dates = pd.DatetimeIndex(pd.to_datetime(list(nav_dates))).sort_values().unique()
+    raw_items = {}
+    for key, spec in specs.items():
+        raw = pd.read_csv(spec['path'], encoding='utf-8-sig',
+                          usecols=['date', spec['nav_col'], spec['p_col']], parse_dates=['date'])
+        raw = (raw.sort_values('date').drop_duplicates('date', keep='last')
+               .set_index('date')[[spec['nav_col'], spec['p_col']]])
+        raw.columns = ['nav', 'p']
+        raw[['nav', 'p']] = raw[['nav', 'p']].apply(pd.to_numeric, errors='coerce')
+        raw = raw.dropna(subset=['nav'])
+        if raw.empty or not raw.index.is_monotonic_increasing:
+            raise RuntimeError(f'{spec["name"]}独立净值无效')
+        raw['ret'] = raw['nav'].pct_change(fill_method=None)
+        raw_items[key] = raw
+
+    common_end = min([dates.max()] + [raw.index.max() for raw in raw_items.values()])
+    target_dates = dates[dates <= common_end]
+    if not len(target_dates):
+        raise RuntimeError('四子策略与风险平价2.0没有共同展示日期')
+    result = {
+        'window': {'start': str(target_dates[0].date()), 'end': str(target_dates[-1].date())},
+        'annual_days': annual_days,
+        'items': {},
+    }
+    for key, spec in specs.items():
+        raw = raw_items[key]
+        aligned = raw.reindex(target_dates)
+        first_valid = aligned['nav'].first_valid_index()
+        if first_valid is None or first_valid != target_dates[0]:
+            raise RuntimeError(f'{spec["name"]}在共同窗口起点缺少独立净值')
+        normalized = aligned['nav'] / float(aligned['nav'].iloc[0])
+        ret = aligned['ret'].copy()
+        ret.iloc[0] = 0.0
+        valid = normalized.notna()
+        valid_nav = normalized[valid]
+        valid_ret = ret[valid].dropna()
+        n = len(valid_nav)
+        if n < 2:
+            raise RuntimeError(f'{spec["name"]}独立净值有效日期不足')
+        ann = float(valid_nav.iloc[-1] ** (annual_days / n) - 1.0)
+        vol = float(valid_ret.std() * np.sqrt(annual_days))
+        maxdd = float((valid_nav / valid_nav.cummax() - 1.0).min())
+        metrics = {
+            'start': str(valid_nav.index[0].date()), 'end': str(valid_nav.index[-1].date()),
+            'days': n, 'total_return': round(float(valid_nav.iloc[-1] - 1.0), 4),
+            'annual_return': round(ann, 4), 'annual_vol': round(vol, 4),
+            'sharpe': round(float(valid_ret.mean() * annual_days / vol), 3) if vol > 0 else 0.0,
+            'max_drawdown': round(maxdd, 4),
+            'calmar': round(ann / abs(maxdd), 3) if maxdd < 0 else None,
+            'win_rate': round(float((valid_ret > 0).mean()), 4),
+            'avg_exposure': round(float(aligned.loc[valid, 'p'].mean()), 4),
+        }
+        yearly = {}
+        for year, group in ret[valid].dropna().groupby(ret[valid].dropna().index.year):
+            yearly[str(year)] = round(float((1.0 + group).prod() - 1.0), 4)
+
+        p_diffs = []
+        for dt, p in aligned['p'].dropna().items():
+            day = str(dt.date())
+            if day in rp_daily:
+                p_diffs.append(abs(float(p) - float(rp_daily[day]['p'][spec['p_index']])))
+        max_p_diff = max(p_diffs, default=0.0)
+        if max_p_diff > 1e-6:
+            raise RuntimeError(f'{spec["name"]}独立择时仓位与rp_daily不一致：{max_p_diff}')
+        missing_dates = [str(d.date()) for d in aligned.index[aligned['nav'].isna()]]
+        result['items'][key] = {
+            'name': spec['name'], 'short_name': spec['short_name'],
+            'definition': spec['definition'], 'source': spec['source'],
+            'source_end': str(raw.index.max().date()), 'metrics': metrics, 'yearly': yearly,
+            'series': [[str(dt.date()), round(float(normalized.loc[dt]), 6),
+                        round(float(ret.loc[dt]), 6) if pd.notna(ret.loc[dt]) else None,
+                        round(float(aligned.at[dt, 'p']), 6) if pd.notna(aligned.at[dt, 'p']) else None]
+                       if valid.loc[dt] else [str(dt.date()), None, None, None]
+                       for dt in target_dates],
+            'data_quality': {
+                'missing_count': len(missing_dates), 'missing_dates': missing_dates,
+                'timing_max_abs_diff_vs_rp': max_p_diff,
+                'timing_compared_days': len(p_diffs),
+                'notes': spec['notes'],
+            },
+        }
+    return result
+
+
 def build_beta_z():
     """袖最终 beta/Z 信号参数：A股、全球及商品五腿；使用信号计算日。"""
     commodity_states = ROOT / '09_商品' / '商品择时2.0_N5组合回测' / 'states'
@@ -468,6 +593,10 @@ def main():
           + ('（>1e-6，请检查）' if max_dev > 1e-6 else ' ✓'))
 
     rp_daily, rebal_dates = build_rp_daily(nav)
+    standalone = build_standalone_strategies(ROOT, nav_dates, rp_daily)
+    print(f'[独立绩效] {standalone["window"]["start"]} ~ {standalone["window"]["end"]} | '
+          + ' | '.join(f'{v["short_name"]} p核对 {v["data_quality"]["timing_max_abs_diff_vs_rp"]:.1e}'
+                       for v in standalone['items'].values()))
     signals = build_signals()
     reference_benchmarks = build_reference_benchmarks(ROOT, nav_dates)
     beta_z = build_beta_z()
@@ -478,6 +607,7 @@ def main():
         'names': names, 'metrics': metrics, 'nav': nav_series,
         'weights': weight_series, 'benchmarks': benchmarks,
         'reference_benchmarks': reference_benchmarks,
+        'standalone_strategies': standalone,
         'positions': positions, 'a_stock_detail': a_detail, 'rp_daily': rp_daily,
         'rebal_dates': rebal_dates, 'signals': signals, 'beta_z': beta_z,
         'a_environment': a_environment, 'hk_timing': hk_timing,
