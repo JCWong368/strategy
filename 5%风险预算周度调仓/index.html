@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5%风险预算周度调仓 策略展示</title>
+<script src="echarts.min.js"></script>
+<script src="data.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f4f6fa; color: #2b3445; padding: 16px; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .sub { color: #8492a6; font-size: 12px; margin-bottom: 14px; }
+  .cards { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+  .card { background: #fff; border-radius: 10px; padding: 16px 24px; box-shadow: 0 1px 3px rgba(0,0,0,.08); min-width: 165px; }
+  .card .k { font-size: 14px; color: #8492a6; }
+  .card .v { font-size: 27px; font-weight: 700; margin-top: 4px; }
+  .panel { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 14px; margin-bottom: 14px; }
+  .panel h2 { font-size: 15px; margin-bottom: 10px; color: #33415c; }
+  .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .toolbar label { font-size: 13px; color: #5a6a85; }
+  #chart_nav { width: 100%; height: 440px; }
+  #chart_dd { width: 100%; height: 270px; }
+  #chart_risk { width: 100%; height: 320px; }
+  #chart_pos { width: 100%; height: 340px; }
+  .table-wrap { width: 100%; overflow-x: auto; }
+  .table-wrap table { min-width: 900px; }
+  .table-scroll { max-height: 480px; overflow-y: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { border-bottom: 1px solid #edf0f5; padding: 6px 8px; text-align: right; white-space: nowrap; }
+  th { color: #8492a6; font-weight: 500; background: #fafbfc; position: sticky; top: 0; }
+  td.l, th.l { text-align: left; }
+  .kv { font-size: 13px; line-height: 1.9; margin-bottom: 6px; }
+  .kv b { color: #5a6a85; font-weight: 500; margin-right: 6px; }
+  .note { color: #5a6a85; font-size: 12px; line-height: 1.8; }
+  .warning { color: #a04700; background: #fff7e8; border: 1px solid #f0d7ae; border-radius: 6px; padding: 9px 11px; font-size: 13px; line-height: 1.7; margin-bottom: 10px; }
+  .none-tip { color: #a0aab8; font-size: 13px; padding: 8px 0; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; background: #eef2f8; margin: 2px 4px 2px 0; }
+  .action { font-size: 22px; font-weight: 700; color: #5470c6; }
+  .topnav { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .topnav a { padding: 4px 14px; border-radius: 16px; background: #fff; border: 1px solid #d0d7e2; color: #33415c; text-decoration: none; font-size: 13px; }
+  .topnav a.cur { background: #5470c6; border-color: #5470c6; color: #fff; font-weight: 600; }
+  .topnav a.home { color: #5470c6; }
+  details.year-block { margin: 6px 0; border: 1px solid #edf0f5; border-radius: 6px; padding: 8px 10px; }
+  details.year-block summary { cursor: pointer; font-size: 13px; color: #33415c; }
+  details.year-block table { margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="topnav">
+  <a class="home" href="../index.html">← 总站</a>
+  <a href="../无杠杆5%_五袖ENS/index.html">无杠杆5%五袖ENS</a>
+  <a class="cur" href="../5%风险预算周度调仓/index.html">5%风险预算周度调仓</a>
+</div>
+<h1>5%风险预算周度调仓 <span style="font-size:13px;color:#8492a6;font-weight:400">五袖RP+ENS · 60日波动率目标5% · 每周首个A股交易日开盘调仓 · 周内自然漂移</span></h1>
+<div class="sub" id="range"></div>
+<div class="cards" id="metrics"></div>
+
+<div class="panel">
+  <h2>净值对比（滚轮缩放）</h2>
+  <div class="toolbar"><label><input type="checkbox" id="logscale"> 对数坐标</label><label><input type="checkbox" id="showred"> 标注周度调仓日</label></div>
+  <div id="chart_nav"></div>
+</div>
+<div class="panel"><h2>回撤对比</h2><div id="chart_dd"></div></div>
+<div class="panel">
+  <h2>周度调仓目标与实际仓位</h2>
+  <div class="note" style="margin-bottom:8px">实线为周末收盘实际仓位，虚线为最近周度调仓目标。外层份额周内冻结，因此实际仓位随价格漂移；商品内部规则仍按原策略运行。</div>
+  <div id="chart_pos"></div>
+</div>
+<div class="panel"><h2>波动率目标与缩放因子</h2><div id="chart_risk"></div></div>
+
+<div class="panel">
+  <h2>周度调仓记录</h2>
+  <div class="kv" id="rebalance_summary"></div>
+  <div class="table-wrap table-scroll"><div id="rebalances"></div></div>
+</div>
+
+<div class="panel">
+  <h2>最新实际生效的 precompute</h2>
+  <div class="note" style="margin-bottom:8px">每日随五袖ENS展示链路刷新；仅展示T+1≤今天的已生效结果。调仓日输出REBALANCE及ETF目标，非调仓日输出HOLD，不生成新交易目标。本页面不接账户、富易调仓或自动下单。</div>
+  <div id="latest_pre"></div>
+</div>
+
+<div class="panel"><h2>分月收益</h2><div id="monthly"></div></div>
+<div class="panel"><h2>分段绩效对比</h2><div class="table-wrap"><div id="perf_table"></div></div></div>
+<div class="panel">
+  <h2>口径与风险注记</h2>
+  <div class="warning">A股五ETF、港股两ETF等权；全球和商品保留原内部规则。上市前含指数模拟，当前活跃度倒选历史ETF存在后视选择偏差，全ETF共同窗口较短。历史结果不构成样本外证明或投资建议。</div>
+  <div class="note" id="instruments"></div>
+</div>
+
+<script>
+const D = window.STRATEGY_DATA;
+const SLEEVES = ['a','hk','gl','cmd','bond'];
+const NAMES = {a:'A股',hk:'港股',gl:'全球',cmd:'商品',bond:'国债'};
+const COLORS = {a:'#5470c6',hk:'#91cc75',gl:'#ee6666',cmd:'#fac858',bond:'#9b59b6'};
+const COMPARE_NAMES = {weekly:'ETF周频',index_weekly:'指数周频研究对照',original_target:'原每日5%策略'};
+const COMPARE_COLORS = {weekly:'#5470c6',index_weekly:'#91cc75',original_target:'#ee6666'};
+const pct = (x,d=1) => x == null ? '-' : (x*100).toFixed(d)+'%';
+const num = (x,d=2) => x == null ? '-' : (+x).toFixed(d);
+const dates = D.nav.map(r=>r[0]);
+document.getElementById('range').textContent = `回测区间 ${dates[0]} ~ ${dates[dates.length-1]} · ${dates.length}个交易日 · 数据截至${dates[dates.length-1]}`;
+
+(function renderMetrics(){
+  const m=D.metrics, s=D.rebalance_summary;
+  const items=[['累计收益',pct(m.total_return)],['几何年化',pct(m.geom_ann)],['年化波动',pct(m.ann_vol)],
+    ['Sharpe',num(m.sharpe_rf0)],['最大回撤',pct(m.max_drawdown)],['卡玛',num(m.calmar)],
+    ['日胜率',pct(m.win_rate)],['平均实际敞口',pct(m.mean_exposure)],['总换手',num(m.turnover_total)+'倍'],
+    ['周度调仓',s.n_rebalances_including_inception+'次']];
+  document.getElementById('metrics').innerHTML=items.map(([k,v])=>`<div class="card"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+})();
+
+const navChart=echarts.init(document.getElementById('chart_nav'));
+function navOption(){
+  const log=document.getElementById('logscale').checked;
+  const series=[{name:COMPARE_NAMES.weekly,type:'line',data:D.nav.map(r=>[r[0],r[1]]),showSymbol:false,color:COMPARE_COLORS.weekly,lineStyle:{width:1.7}}];
+  for(const key of ['index_weekly','original_target']) series.push({name:COMPARE_NAMES[key],type:'line',data:D.comparisons[key].map(r=>[r[0],r[1]]),showSymbol:false,color:COMPARE_COLORS[key],lineStyle:{width:1.1}});
+  if(document.getElementById('showred').checked) series[0].markLine={symbol:'none',silent:true,lineStyle:{color:'#fac858',type:'dashed',width:.6},data:D.rebalances.map(r=>({xAxis:r.date})),label:{show:false}};
+  return {tooltip:{trigger:'axis',axisPointer:{type:'cross'},formatter:ps=>{let h=ps[0].axisValue;ps.forEach(p=>h+=`<br/>${p.marker}${p.seriesName}: ${(+p.value[1]).toFixed(4)}`);return h;}},
+    legend:{top:0},grid:{left:50,right:30,top:45,bottom:60},xAxis:{type:'time'},yAxis:{type:log?'log':'value',scale:true},dataZoom:[{type:'inside'},{type:'slider',height:18,bottom:8}],series};
+}
+navChart.setOption(navOption());
+['logscale','showred'].forEach(id=>document.getElementById(id).onchange=()=>navChart.setOption(navOption()));
+
+const ddChart=echarts.init(document.getElementById('chart_dd'));
+ddChart.setOption({tooltip:{trigger:'axis',formatter:ps=>{let h=ps[0].axisValue;ps.forEach(p=>h+=`<br/>${p.marker}${p.seriesName}: ${pct(p.value[1],2)}`);return h;}},
+  legend:{top:0},grid:{left:50,right:30,top:45,bottom:60},xAxis:{type:'time'},yAxis:{type:'value',max:0,axisLabel:{formatter:v=>pct(v,0)}},dataZoom:[{type:'inside'},{type:'slider',height:18,bottom:8}],
+  series:[{name:COMPARE_NAMES.weekly,type:'line',data:D.nav.map(r=>[r[0],r[3]]),showSymbol:false,color:COMPARE_COLORS.weekly,areaStyle:{opacity:.08}},
+    ...['index_weekly','original_target'].map(key=>({name:COMPARE_NAMES[key],type:'line',data:D.comparisons[key].map(r=>[r[0],r[2]]),showSymbol:false,color:COMPARE_COLORS[key],lineStyle:{width:1}}))]});
+echarts.connect([navChart,ddChart]);
+
+const posChart=echarts.init(document.getElementById('chart_pos'));
+const posSeries=[];
+SLEEVES.forEach((s,i)=>{
+  posSeries.push({name:NAMES[s]+'实际',type:'line',stack:'actual',data:D.daily.map(r=>[r[0],r[6+i]]),showSymbol:false,color:COLORS[s],areaStyle:{opacity:.55},lineStyle:{width:.5}});
+  posSeries.push({name:NAMES[s]+'目标',type:'line',data:D.daily.map(r=>[r[0],r[1+i]]),showSymbol:false,color:COLORS[s],lineStyle:{width:1,type:'dashed'}});
+});
+posChart.setOption({tooltip:{trigger:'axis',formatter:ps=>{let h=ps[0].axisValue;ps.forEach(p=>h+=`<br/>${p.marker}${p.seriesName}: ${pct(p.value[1],2)}`);return h;}},
+  legend:{top:0,type:'scroll'},grid:{left:50,right:30,top:55,bottom:60},xAxis:{type:'time'},yAxis:{type:'value',axisLabel:{formatter:v=>pct(v,0)}},dataZoom:[{type:'inside'},{type:'slider',height:18,bottom:8}],series:posSeries});
+
+const riskChart=echarts.init(document.getElementById('chart_risk'));
+riskChart.setOption({tooltip:{trigger:'axis',formatter:ps=>{let h=ps[0].axisValue;ps.forEach(p=>h+=`<br/>${p.marker}${p.seriesName}: ${p.seriesName.includes('波动率')?pct(p.value[1],2):num(p.value[1],3)}`);return h;}},
+  legend:{top:0},grid:{left:50,right:55,top:45,bottom:60},xAxis:{type:'time'},yAxis:[{type:'value',name:'缩放/敞口'},{type:'value',name:'波动率',axisLabel:{formatter:v=>pct(v,0)}}],dataZoom:[{type:'inside'},{type:'slider',height:18,bottom:8}],
+  series:[{name:'调仓k_exec',type:'line',data:D.daily.map(r=>[r[0],r[13]]),showSymbol:false,color:'#5470c6'},
+    {name:'60日风险波动率',type:'line',data:D.daily.map(r=>[r[0],r[14]]),showSymbol:false,yAxisIndex:1,color:'#fac858'},
+    {name:'目标总敞口',type:'line',data:D.daily.map(r=>[r[0],SLEEVES.reduce((sum,s,i)=>sum+r[1+i],0)]),showSymbol:false,color:'#ee6666',lineStyle:{type:'dotted'}},
+    {name:'实际总敞口',type:'line',data:D.daily.map(r=>[r[0],r[12]]),showSymbol:false,color:'#91cc75',lineStyle:{type:'dashed'}}]});
+
+(function renderRebalances(){
+  const s=D.rebalance_summary;
+  document.getElementById('rebalance_summary').innerHTML=`<b>调仓次数</b>${s.n_rebalances_including_inception}（含首日） · <b>节假日顺延</b>${s.n_holiday_shifted_rebalances}次 · <b>有换手交易日占比</b>${pct(s.pct_days_with_turnover,1)} · <b>单次调仓换手中位数</b>${pct(s.rebalance_turnover_median,2)}`;
+  let h='<table><tr><th class="l">生效日</th><th class="l">信号日</th><th>k</th><th>目标敞口</th><th>换手</th>'+SLEEVES.map(s=>`<th>${NAMES[s]}</th>`).join('')+'</tr>';
+  [...D.rebalances].reverse().forEach(r=>{h+=`<tr><td class="l">${r.date}${r.holiday_shift?'（顺延）':''}</td><td class="l">${r.signal_date||'-'}</td><td>${num(r.k_exec,3)}</td><td>${pct(r.target_total_exposure,2)}</td><td>${pct(r.turnover,2)}</td>`+SLEEVES.map(s=>`<td>${pct(r['target_pos_'+s],2)}</td>`).join('')+'</tr>';});
+  document.getElementById('rebalances').innerHTML=h+'</table>';
+})();
+
+function renderLatestPre(){
+  const el=document.getElementById('latest_pre'), today=new Date().toLocaleDateString('sv-SE');
+  const keys=Object.keys(D.signals).filter(k=>(D.signals[k].meta.t1_date||'9999-12-31')<=today).sort();
+  if(!keys.length){el.innerHTML='<div class="none-tip">暂无已生效的precompute；待生效目标不提前展示。</div>';return;}
+  const t=keys[keys.length-1],s=D.signals[t],action=s.meta.action;
+  let h=`<div class="kv"><span class="action">${action}</span></div><div class="kv"><b>数据日T</b>${t} · <b>目标日T+1</b>${s.meta.t1_date}</div>`;
+  if(action==='HOLD'){
+    h+=`<div class="warning">本周不调仓，不生成新ETF目标。下一调仓日：${s.meta.next_rebalance_date||'未知'}。</div>`;
+    h+='<div class="table-wrap"><table><tr><th class="l">袖</th><th>最近周度目标</th><th>T日实际收盘仓位</th></tr>';
+    SLEEVES.forEach(k=>h+=`<tr><td class="l">${NAMES[k]}</td><td>${pct(s.last_rebalance_target[k],2)}</td><td>${pct(s.actual_close_positions[k],2)}</td></tr>`);
+    h+='</table></div>'+`<div class="kv" style="margin-top:8px"><b>实际仓位日期</b>${s.meta.position_date||t} · <b>实际总敞口</b>${pct(s.actual_close_exposure,2)} · <b>现金</b>${pct(s.actual_cash,2)}</div>`;
+    el.innerHTML=h;return;
+  }
+  const v=s.volatility,e=s.bond_ens,er=e.returns||{};
+  h+=`<div class="kv"><b>五袖权重基准日</b>${s.meta.base_weights_asof} · <b>国债ENS</b>${e.signal_date}，${e.ens_votes}/3票，目标${e.target_ens} · <b>10/20/60日</b>${pct(er['10'],2)} / ${pct(er['20'],2)} / ${pct(er['60'],2)}</div>`;
+  h+=`<div class="kv"><b>60日风险波动率</b>${pct(v.sigma_risky,2)} · <b>k_raw</b>${num(v.k_raw,3)} · <b>k_cap</b>${v.k_cap==null?'-':num(v.k_cap,3)} · <b>k_exec</b>${num(v.k_exec,3)}</div>`;
+  h+=`<div class="kv"><b>共享池</b>供给${pct(s.pool.S,2)} · 需求${pct(s.pool.D,2)} · ${s.pool.tight?'紧俏':'不紧俏'}</div>`;
+  h+='<div class="table-wrap"><table><tr><th class="l">袖</th><th>底座权重</th><th>择时系数</th><th>底座仓位</th><th>最终目标</th></tr>';
+  SLEEVES.forEach(k=>h+=`<tr><td class="l">${NAMES[k]}</td><td>${pct(s.base_weights[k],2)}</td><td>${num(s.p[k],3)}</td><td>${pct(s.base_pos[k],2)}</td><td>${pct(s.pos[k],2)}</td></tr>`);
+  h+='</table></div>'+`<div class="kv" style="margin-top:8px"><b>目标总敞口</b>${pct(s.total_exposure,2)} · <b>外层现金</b>${pct(s.cash,2)} · <b>商品原生现金</b>${pct(s.commodity_native_cash,2)} · <b>合计现金</b>${pct(s.total_cash,2)}</div>`;
+  h+='<div class="kv"><b>T+1 ETF目标持仓</b></div><div class="table-wrap"><table><tr><th>#</th><th class="l">代码</th><th class="l">名称</th><th class="l">袖</th><th>权重</th></tr>';
+  s.t1_holdings.forEach(([code,sleeve,weight,name],i)=>h+=`<tr><td>${i+1}</td><td class="l">${code}</td><td class="l">${name||D.names[code]||code}</td><td class="l">${NAMES[sleeve]||sleeve}</td><td>${pct(weight,2)}</td></tr>`);
+  h+='</table></div><div class="kv" style="margin-top:8px"><b>数据状态</b>'+Object.entries(s.freshness).map(([k,v])=>`<span class="tag">${k} ${v}</span>`).join('')+'</div>';
+  el.innerHTML=h;
+}
+renderLatestPre();
+
+(function renderMonthly(){
+  const byYear={};D.nav.forEach(r=>{const y=r[0].slice(0,4),m=r[0].slice(5,7);(byYear[y]=byYear[y]||{})[m]=r[1];});
+  let prev=1,h='';Object.keys(byYear).sort().forEach(y=>{const months=byYear[y],start=prev,parts=[];Object.keys(months).sort().forEach(m=>{const value=months[m],ret=value/prev-1;parts.push([m,ret]);prev=value;});
+    const yr=prev/start-1,wins=parts.filter(p=>p[1]>0).length/parts.length;
+    h+=`<details class="year-block"><summary>${y}年 · 收益${pct(yr,2)} · 月胜率${pct(wins,0)}</summary><table><tr><th class="l">月份</th><th>收益</th></tr>`+parts.map(([m,r])=>`<tr><td class="l">${y}-${m}</td><td>${pct(r,2)}</td></tr>`).join('')+'</table></details>';});
+  document.getElementById('monthly').innerHTML=h;
+})();
+
+(function renderPerf(){
+  let h='<table><tr><th class="l">分段</th><th class="l">策略</th><th>累计收益</th><th>几何年化</th><th>年化波动</th><th>Sharpe</th><th>最大回撤</th><th>卡玛</th><th>平均敞口</th><th>总换手</th></tr>';
+  D.performance.forEach(r=>h+=`<tr><td class="l">${r.segment}</td><td class="l">${r.strategy}</td><td>${pct(r.total_return,2)}</td><td>${pct(r.geom_ann,2)}</td><td>${pct(r.ann_vol,2)}</td><td>${num(r.sharpe_rf0)}</td><td>${pct(r.max_drawdown,2)}</td><td>${num(r.calmar)}</td><td>${pct(r.mean_exposure,1)}</td><td>${num(r.turnover_total)}倍</td></tr>`);
+  document.getElementById('perf_table').innerHTML=h+'</table>';
+})();
+
+(function renderInstruments(){
+  const a=Object.values(D.instruments.a).map(x=>`${x.etf_code} ${x.etf_name}`).join('、');
+  const hk=Object.values(D.instruments.hk).map(x=>`${x.etf_code} ${x.etf_name}`).join('、');
+  document.getElementById('instruments').innerHTML=`<b>A股等权：</b>${a}<br><b>港股等权：</b>${hk}<br><b>全球：</b>513500/513030/513080/513880 = 50%/15%/15%/20%；<b>国债：</b>511130。`;
+})();
+
+window.addEventListener('resize',()=>{navChart.resize();ddChart.resize();posChart.resize();riskChart.resize();});
+</script>
+</body>
+</html>
