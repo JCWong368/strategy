@@ -162,7 +162,7 @@ function renderLatestPre(){
   let h=`<div class="kv"><span class="action">${action}</span></div><div class="kv"><b>数据日T</b>${t} · <b>目标日T+1</b>${s.meta.t1_date}</div>`;
   if(action==='HOLD'){
     h+=`<div class="warning">本周不调仓，不生成新ETF目标。下一调仓日：${s.meta.next_rebalance_date||'未知'}。</div>`;
-    h+='<div class="table-wrap"><table><tr><th class="l">袖</th><th>最近周度目标</th><th>T日实际收盘仓位</th></tr>';
+    h+='<div class="table-wrap"><table><tr><th class="l">袖</th><th>最近周度目标</th><th>实际收盘仓位</th></tr>';
     SLEEVES.forEach(k=>h+=`<tr><td class="l">${NAMES[k]}</td><td>${pct(s.last_rebalance_target[k],2)}</td><td>${pct(s.actual_close_positions[k],2)}</td></tr>`);
     h+='</table></div>'+`<div class="kv" style="margin-top:8px"><b>实际仓位日期</b>${s.meta.position_date||t} · <b>实际总敞口</b>${pct(s.actual_close_exposure,2)} · <b>现金</b>${pct(s.actual_cash,2)}</div>`;
     el.innerHTML=h;return;
