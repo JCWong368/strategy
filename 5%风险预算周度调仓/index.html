@@ -70,7 +70,7 @@
   <div class="toolbar"><label><input type="checkbox" id="logscale"> 对数坐标</label><label><input type="checkbox" id="showred"> 标注周度调仓日</label></div>
   <div id="chart_nav"></div>
 </div>
-<div class="panel"><h2>回撤对比</h2><div id="chart_dd"></div></div>
+<div class="panel"><h2>回撤（仅策略本身）</h2><div id="chart_dd"></div></div>
 <div class="panel">
   <h2>周度调仓目标与实际仓位</h2>
   <div class="note" style="margin-bottom:8px">实线为周末收盘实际仓位，虚线为最近周度调仓目标。外层份额周内冻结，因此实际仓位随价格漂移；商品内部规则仍按原策略运行。</div>
@@ -142,8 +142,7 @@ navChart.setOption(navOption());
 const ddChart=echarts.init(document.getElementById('chart_dd'));
 ddChart.setOption({tooltip:{trigger:'axis',formatter:ps=>{let h=ps[0].axisValue;ps.forEach(p=>h+=`<br/>${p.marker}${p.seriesName}: ${pct(p.value[1],2)}`);return h;}},
   legend:{top:0},grid:{left:50,right:30,top:45,bottom:60},xAxis:{type:'time'},yAxis:{type:'value',max:0,axisLabel:{formatter:v=>pct(v,0)}},dataZoom:[{type:'inside'},{type:'slider',height:18,bottom:8}],
-  series:[{name:COMPARE_NAMES.weekly,type:'line',data:D.nav.map(r=>[r[0],r[3]]),showSymbol:false,color:COMPARE_COLORS.weekly,areaStyle:{opacity:.08}},
-    ...['index_weekly','original_target'].map(key=>({name:COMPARE_NAMES[key],type:'line',data:D.comparisons[key].map(r=>[r[0],r[2]]),showSymbol:false,color:COMPARE_COLORS[key],lineStyle:{width:1}}))]});
+  series:[{name:COMPARE_NAMES.weekly,type:'line',data:D.nav.map(r=>[r[0],r[3]]),showSymbol:false,color:COMPARE_COLORS.weekly,areaStyle:{opacity:.08}}]});
 echarts.connect([navChart,ddChart]);
 
 const posChart=echarts.init(document.getElementById('chart_pos'));
