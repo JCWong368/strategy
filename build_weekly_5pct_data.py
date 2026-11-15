@@ -50,6 +50,8 @@ def build_signals() -> dict:
             pre = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
+        if pre["meta"]["action"] != "REBALANCE":
+            continue
         pre["t1_holdings"] = []
         holdings_path = path.with_name(path.name.replace(
             "_precompute.json", "_precompute_holdings.csv"))

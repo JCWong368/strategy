@@ -93,9 +93,9 @@
 </div>
 
 <div class="panel">
-  <h2>Precompute（最新实际生效 / 历史回溯）</h2>
-  <div class="note" style="margin-bottom:8px">默认展示T+1≤今天的最新已生效结果，也可切换历史落盘日期。调仓日输出REBALANCE及ETF目标，非调仓日输出HOLD，不生成新交易目标。本页面不接账户、富易调仓或自动下单。</div>
-  <div class="toolbar"><label>数据日T <select id="pre_date"></select></label><button id="pre_latest">最新已生效</button></div>
+  <h2>Precompute（最近一个已有的周一目标）</h2>
+  <div class="note" style="margin-bottom:8px">仅展示周度REBALANCE目标及具体ETF比例，不展示周中HOLD日期；默认取最近一份已有目标，可切换历史周度记录。尚未到T+1时标注待生效。本页面不接账户、富易调仓或自动下单。</div>
+  <div class="toolbar"><label>信号数据日T <select id="pre_date"></select></label><button id="pre_latest">最近周一目标</button></div>
   <div id="latest_pre"></div>
 </div>
 
@@ -208,7 +208,7 @@ document.getElementById('holding_code').onchange=e=>holdingChart.setOption(holdi
 
 function renderLatestPre(t){
   const el=document.getElementById('latest_pre'), today=new Date().toLocaleDateString('sv-SE');
-  const keys=Object.keys(D.signals).filter(k=>(D.signals[k].meta.t1_date||'9999-12-31')<=today).sort();
+  const keys=Object.keys(D.signals).sort();
   if(!t&&!keys.length){el.innerHTML='<div class="none-tip">暂无已生效的precompute；待生效目标不提前展示。</div>';return;}
   t=t||keys[keys.length-1];
   const s=D.signals[t];
@@ -239,11 +239,9 @@ function renderLatestPre(t){
   const select=document.getElementById('pre_date');
   const all=Object.keys(D.signals).sort().reverse();
   select.innerHTML=all.map(t=>`<option value="${t}">${t} · ${D.signals[t].meta.action} · T+1 ${D.signals[t].meta.t1_date}</option>`).join('');
-  const today=new Date().toLocaleDateString('sv-SE');
-  const effective=all.filter(t=>(D.signals[t].meta.t1_date||'9999-12-31')<=today);
-  if(all.length){select.value=effective[0]||all[0];renderLatestPre(select.value);}
+  if(all.length){select.value=all[0];renderLatestPre(select.value);}
   select.onchange=()=>renderLatestPre(select.value);
-  document.getElementById('pre_latest').onclick=()=>{if(effective.length){select.value=effective[0];renderLatestPre(select.value);}};
+  document.getElementById('pre_latest').onclick=()=>{if(all.length){select.value=all[0];renderLatestPre(select.value);}};
 })();
 
 (function renderMonthly(){
