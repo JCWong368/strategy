@@ -70,11 +70,15 @@ def main() -> None:
     targets = pd.read_csv(BASE / "output" / "weekly_targets.csv", parse_dates=[
         "date", "signal_date", "scheduled_monday"])
     rebalance_summary = pd.read_csv(BASE / "output" / "rebalance_summary.csv")
+    holdings_daily = pd.read_csv(
+        BASE / "output" / "etf_holdings_daily.csv", dtype={"code": str}, parse_dates=["date"])
     cfg = yaml.safe_load((BASE / "config.yaml").read_text(encoding="utf-8"))
     names = load_names()
     for group in ["a", "hk"]:
         for info in cfg["instruments"][group].values():
             names[info["etf_code"]] = info["etf_name"]
+    for row in holdings_daily.itertuples(index=False):
+        names[row.code] = row.name
 
     metrics = records(perf.loc[(perf.segment == "全窗口") & (perf.strategy_key == "weekly")])[0]
     daily = []
@@ -102,6 +106,13 @@ def main() -> None:
                 round(comparison_nav / comparison_peaks[key] - 1.0, 6),
             ])
 
+    holdings = {}
+    for date, group in holdings_daily.groupby("date"):
+        holdings[str(date.date())] = [[
+            r.code, r.sleeve, r.name, round(float(r.target_weight), 8),
+            round(float(r.actual_weight), 8),
+        ] for r in group.itertuples(index=False)]
+
     data = {
         "names": names,
         "metrics": metrics,
@@ -113,6 +124,7 @@ def main() -> None:
         "performance": records(perf),
         "signals": build_signals(),
         "instruments": cfg["instruments"],
+        "holdings": holdings,
     }
     OUT.parent.mkdir(parents=True, exist_ok=True)
     js = "window.STRATEGY_DATA = " + json.dumps(
