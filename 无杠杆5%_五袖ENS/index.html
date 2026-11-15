@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>无杠杆5%波动率目标（五袖ENS）策略展示</title>
+<script src="echarts.min.js"></script>
+<script src="data.js?v=1794611000"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f4f6fa; color: #2b3445; padding: 16px; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .sub { color: #8492a6; font-size: 12px; margin-bottom: 14px; }
+  .cards { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+  .card { background: #fff; border-radius: 10px; padding: 16px 26px; box-shadow: 0 1px 3px rgba(0,0,0,.08); min-width: 170px; }
+  .card .k { font-size: 14px; color: #8492a6; }
+  .card .v { font-size: 28px; font-weight: 700; margin-top: 4px; }
+  .panel { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 14px; margin-bottom: 14px; }
+  .panel h2 { font-size: 15px; margin-bottom: 10px; color: #33415c; }
+  .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .toolbar button { padding: 4px 12px; border: 1px solid #d0d7e2; background: #fff; border-radius: 5px; cursor: pointer; font-size: 13px; }
+  .toolbar button:hover { background: #eef2f8; }
+  .toolbar input[type=date] { padding: 4px 8px; border: 1px solid #d0d7e2; border-radius: 5px; font-size: 13px; }
+  .toolbar label { font-size: 13px; color: #5a6a85; user-select: none; cursor: pointer; }
+  #chart_nav { width: 100%; height: 420px; }
+  #chart_dd { width: 100%; height: 260px; }
+  #chart_w { width: 100%; height: 320px; }
+  #chart_k { width: 100%; height: 320px; }
+  #chart_ens { width: 100%; height: 300px; }
+  .table-wrap { width: 100%; overflow-x: auto; }
+  .table-wrap table { min-width: 900px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { border-bottom: 1px solid #edf0f5; padding: 6px 8px; text-align: right; }
+  th { color: #8492a6; font-weight: 500; background: #fafbfc; }
+  td.l, th.l { text-align: left; }
+  .kv { font-size: 13px; line-height: 1.9; }
+  .kv b { color: #5a6a85; font-weight: 500; margin-right: 6px; }
+  .none-tip { color: #a0aab8; font-size: 13px; padding: 8px 0; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; background: #eef2f8; margin: 2px 4px 2px 0; }
+  .pos { color: #d63031; } .neg { color: #00b26a; }
+  .topnav { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .topnav a { padding: 4px 14px; border-radius: 16px; background: #fff; border: 1px solid #d0d7e2; color: #33415c; text-decoration: none; font-size: 13px; }
+  .topnav a:hover { background: #eef2f8; }
+  .topnav a.cur { background: #5470c6; border-color: #5470c6; color: #fff; font-weight: 600; }
+  .topnav a.home { color: #5470c6; }
+  .wbar { display: flex; height: 18px; border-radius: 4px; overflow: hidden; margin: 6px 0 10px; }
+  .wbar div { height: 100%; }
+  .wlegend { font-size: 12px; color: #5a6a85; display: flex; flex-wrap: wrap; gap: 10px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 1100px) { .grid2 { grid-template-columns: 1fr; } }
+  details.year-block { margin: 6px 0; border: 1px solid #edf0f5; border-radius: 6px; padding: 8px 10px; }
+  details.year-block summary { cursor: pointer; font-size: 13px; color: #33415c; user-select: none; }
+  details.year-block table { margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<div class="topnav">
+  <a class="home" href="../index.html">← 总站</a>
+  <a href="../风险平价2.0/index.html">风险平价2.0</a>
+  <a class="cur" href="../无杠杆5%_五袖ENS/index.html">无杠杆5%五袖ENS</a>
+</div>
+
+<h1>无杠杆5%波动率目标（五袖ENS） <span style="font-size:13px;color:#8492a6;font-weight:400">五袖RP+ENS底座 · 60日波动率目标5% · 账户总敞口≤100% · 每日调整 · T+1执行</span></h1>
+<div class="sub" id="range"></div>
+
+<div class="cards" id="metrics"></div>
+
+<div class="panel">
+  <h2>净值（滚轮缩放）</h2>
+  <div class="toolbar">
+    <label><input type="checkbox" id="logscale"> 对数坐标</label>
+    <label><input type="checkbox" id="showred"> 标注季度重估日</label>
+  </div>
+  <div id="chart_nav"></div>
+</div>
+
+<div class="panel">
+  <h2>回撤</h2>
+  <div id="chart_dd"></div>
+</div>
+
+<div class="panel">
+  <h2>波动率目标与缩放因子</h2>
+  <div id="chart_k"></div>
+</div>
+
+<div class="panel">
+  <h2>五袖底座权重与实际仓位</h2>
+  <div id="chart_w"></div>
+</div>
+
+<div class="panel">
+  <h2>国债ENS择时信号</h2>
+  <div id="chart_ens"></div>
+  <div class="kv" id="ens_latest"></div>
+</div>
+
+<div class="grid2">
+  <div class="panel">
+    <h2>指定日组合持仓</h2>
+    <div class="toolbar">
+      <input type="date" id="pos_date">
+      <button onclick="renderPositions()">查询</button>
+    </div>
+    <div id="pos_info" class="kv"></div>
+    <div class="table-wrap"><div id="pos_table"></div></div>
+  </div>
+  <div class="panel">
+    <h2>RP 底座与共享池</h2>
+    <div class="toolbar">
+      <input type="date" id="rp_date">
+      <button onclick="renderRp()">查询</button>
+    </div>
+    <div id="rp_info" class="kv"></div>
+    <div id="rp_bar"></div>
+    <div class="table-wrap"><div id="rp_table"></div></div>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>最新实际生效的 precompute（次日持仓）</h2>
+  <div class="sub" style="margin-bottom:8px">
+    每日06:00以前一交易日收盘及今晨海外数据计算T+1目标；仅展示T+1≤今天的已生效结果。
+    本面板仅用于网页展示，不读取账户资产、不生成富易调仓指令、不自动下单。
+  </div>
+  <div id="latest_pre"></div>
+</div>
+
+<div class="panel">
+  <h2>分月收益</h2>
+  <div id="monthly"></div>
+</div>
+
+<div class="panel">
+  <h2>分段绩效对比</h2>
+  <div class="table-wrap"><div id="perf_table"></div></div>
+</div>
+
+<script>
+const D = window.STRATEGY_DATA;
+const SLEEVES = ['a','hk','gl','cmd','bond'];
+const SLEEVE_NAMES = {a:'A股', hk:'港股', gl:'全球', cmd:'商品', bond:'国债'};
+const SLEEVE_COLORS = {a:'#5470c6', hk:'#91cc75', gl:'#ee6666', cmd:'#fac858', bond:'#9b59b6'};
+const dates = D.nav.map(r => r[0]);
+const pct = (x, d=1) => (x*100).toFixed(d) + '%';
+
+document.getElementById('range').textContent =
+  `回测区间 ${dates[0]} ~ ${dates[dates.length-1]} · 共 ${dates.length} 个交易日 · 数据截至 ${dates[dates.length-1]}`;
+
+(function renderMetrics(){
+  const m = D.metrics;
+  const items = [
+    ['累计收益', pct(m.total_return)], ['几何年化', pct(m.geom_ann)],
+    ['年化波动', pct(m.ann_vol)], ['Sharpe', m.sharpe.toFixed(2)],
+    ['最大回撤', pct(m.max_dd)], ['卡玛', m.calmar.toFixed(2)],
+    ['日胜率', pct(m.win_rate)], ['平均总敞口', pct(m.mean_exposure)],
+    ['平均国债仓位', pct(m.mean_bond_pos)],
+  ];
+  document.getElementById('metrics').innerHTML = items.map(([k,v]) =>
+    `<div class="card"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+})();
+
+const navChart = echarts.init(document.getElementById('chart_nav'));
+function navOption(){
+  const log = document.getElementById('logscale').checked;
+  const showRed = document.getElementById('showred').checked;
+  const series = [{
+    name: '无杠杆5%目标', type: 'line', data: D.nav.map(r => [r[0], r[1]]),
+    showSymbol: false, lineStyle: {width: 1.6}, color: '#5470c6',
+  }];
+  if (showRed) {
+    series[0].markLine = {
+      symbol: 'none', silent: true,
+      lineStyle: {color: '#ee6666', type: 'dashed', width: 0.8},
+      data: D.rebal_dates.map(d => ({xAxis: d})),
+      label: {show: false},
+    };
+  }
+  return {
+    tooltip: {trigger: 'axis', axisPointer: {type: 'cross'},
+      formatter: ps => {
+        const d = ps[0].axisValue;
+        let s = d;
+        ps.forEach(p => { s += `<br/>${p.marker}${p.seriesName}: ${(+p.value[1]).toFixed(4)}`; });
+        return s;
+      }},
+    legend: {top: 0},
+    grid: {left: 50, right: 30, top: 40, bottom: 60},
+    xAxis: {type: 'time'},
+    yAxis: {type: log ? 'log' : 'value', name: '净值', scale: true},
+    dataZoom: [{type: 'inside'}, {type: 'slider', height: 18, bottom: 8}],
+    series,
+  };
+}
+navChart.setOption(navOption());
+['logscale','showred'].forEach(id => document.getElementById(id).onchange = () => navChart.setOption(navOption()));
+window.addEventListener('resize', () => navChart.resize());
+
+const ddChart = echarts.init(document.getElementById('chart_dd'));
+function ddOption(){
+  return {
+    tooltip: {trigger: 'axis', axisPointer: {type: 'cross'},
+      formatter: ps => {
+        let s = ps[0].axisValue;
+        ps.forEach(p => { s += `<br/>${p.marker}${p.seriesName}: ${pct(p.value[1], 2)}`; });
+        return s;
+      }},
+    legend: {top: 0},
+    grid: {left: 50, right: 30, top: 40, bottom: 60},
+    xAxis: {type: 'time'},
+    yAxis: {type: 'value', name: '回撤', axisLabel: {formatter: v => pct(v, 0)}, max: 0},
+    dataZoom: [{type: 'inside'}, {type: 'slider', height: 18, bottom: 8}],
+    series: [{
+      name: '回撤', type: 'line', data: D.nav.map(r => [r[0], r[3]]),
+      showSymbol: false, lineStyle: {width: 1.2}, color: '#ee6666', areaStyle: {opacity: 0.15},
+    }],
+  };
+}
+ddChart.setOption(ddOption());
+window.addEventListener('resize', () => ddChart.resize());
+echarts.connect([navChart, ddChart]);
+
+const kChart = echarts.init(document.getElementById('chart_k'));
+function kOption(){
+  return {
+    tooltip: {trigger: 'axis', axisPointer: {type: 'cross'},
+      formatter: ps => {
+        let s = ps[0].axisValue;
+        ps.forEach(p => {
+          const v = p.seriesName.includes('波动率') ? pct(p.value[1], 2) : (+p.value[1]).toFixed(3);
+          s += `<br/>${p.marker}${p.seriesName}: ${v}`;
+        });
+        return s;
+      }},
+    legend: {top: 0},
+    grid: {left: 50, right: 50, top: 40, bottom: 60},
+    xAxis: {type: 'time'},
+    yAxis: [{type: 'value', name: '缩放因子', min: 0},
+            {type: 'value', name: '波动率', axisLabel: {formatter: v => pct(v, 0)}}],
+    dataZoom: [{type: 'inside'}, {type: 'slider', height: 18, bottom: 8}],
+    series: [
+      {name: '执行缩放因子 k', type: 'line', data: D.k_daily.map(r => [r[0], r[1]]), showSymbol: false, lineStyle: {width: 1.2}, color: '#5470c6'},
+      {name: '60日风险波动率', type: 'line', data: D.k_daily.map(r => [r[0], r[4]]), showSymbol: false, yAxisIndex: 1, lineStyle: {width: 1}, color: '#fac858'},
+      {name: '总敞口', type: 'line', data: D.k_daily.map(r => [r[0], r[5]]), showSymbol: false, lineStyle: {width: 1, type: 'dashed'}, color: '#91cc75'},
+    ],
+  };
+}
+kChart.setOption(kOption());
+window.addEventListener('resize', () => kChart.resize());
+
+const wChart = echarts.init(document.getElementById('chart_w'));
+function wOption(){
+  const series = [];
+  SLEEVES.forEach(s => {
+    series.push({
+      name: SLEEVE_NAMES[s] + '底座', type: 'line', stack: 'w',
+      data: D.weights.map(r => [r[0], r[1 + SLEEVES.indexOf(s)]]),
+      showSymbol: false, lineStyle: {width: 0.5}, areaStyle: {opacity: 0.7}, color: SLEEVE_COLORS[s],
+    });
+  });
+  SLEEVES.forEach(s => {
+    series.push({
+      name: SLEEVE_NAMES[s] + '仓位', type: 'line',
+      data: D.weights.map(r => [r[0], r[6 + SLEEVES.indexOf(s)]]),
+      showSymbol: false, lineStyle: {width: 1, type: 'dashed'}, color: SLEEVE_COLORS[s],
+    });
+  });
+  series.push({
+    name: '现金', type: 'line', data: D.weights.map(r => [r[0], r[11]]),
+    showSymbol: false, lineStyle: {width: 1}, color: '#8492a6',
+  });
+  return {
+    tooltip: {trigger: 'axis', axisPointer: {type: 'cross'},
+      formatter: ps => {
+        let s = ps[0].axisValue;
+        ps.forEach(p => { s += `<br/>${p.marker}${p.seriesName}: ${pct(p.value[1], 1)}`; });
+        return s;
+      }},
+    legend: {top: 0, type: 'scroll'},
+    grid: {left: 50, right: 30, top: 50, bottom: 60},
+    xAxis: {type: 'time'},
+    yAxis: {type: 'value', axisLabel: {formatter: v => pct(v, 0)}, max: 1},
+    dataZoom: [{type: 'inside'}, {type: 'slider', height: 18, bottom: 8}],
+    series,
+  };
+}
+wChart.setOption(wOption());
+window.addEventListener('resize', () => wChart.resize());
+
+const ensChart = echarts.init(document.getElementById('chart_ens'));
+function ensOption(){
+  return {
+    tooltip: {trigger: 'axis', axisPointer: {type: 'cross'},
+      formatter: ps => {
+        let s = ps[0].axisValue;
+        ps.forEach(p => {
+          const v = p.seriesName === 'ENS仓位' ? p.value[1] : pct(p.value[1], 2);
+          s += `<br/>${p.marker}${p.seriesName}: ${v}`;
+        });
+        return s;
+      }},
+    legend: {top: 0},
+    grid: {left: 50, right: 50, top: 40, bottom: 60},
+    xAxis: {type: 'time'},
+    yAxis: [{type: 'value', name: '涨跌幅', axisLabel: {formatter: v => pct(v, 0)}},
+            {type: 'value', name: 'ENS仓位', min: 0, max: 1}],
+    dataZoom: [{type: 'inside'}, {type: 'slider', height: 18, bottom: 8}],
+    series: [
+      {name: '10日涨跌幅', type: 'line', data: D.ens_signals.map(r => [r[0], r[3]]), showSymbol: false, lineStyle: {width: 1}, color: '#5470c6'},
+      {name: '20日涨跌幅', type: 'line', data: D.ens_signals.map(r => [r[0], r[4]]), showSymbol: false, lineStyle: {width: 1}, color: '#91cc75'},
+      {name: '60日涨跌幅', type: 'line', data: D.ens_signals.map(r => [r[0], r[5]]), showSymbol: false, lineStyle: {width: 1}, color: '#fac858'},
+      {name: 'ENS仓位', type: 'line', data: D.ens_signals.map(r => [r[0], r[1]]), showSymbol: false, yAxisIndex: 1, lineStyle: {width: 1.5}, color: '#9b59b6', areaStyle: {opacity: 0.15}},
+    ],
+  };
+}
+ensChart.setOption(ensOption());
+window.addEventListener('resize', () => ensChart.resize());
+
+(function renderEnsLatest(){
+  const last = D.ens_signals[D.ens_signals.length - 1];
+  document.getElementById('ens_latest').innerHTML =
+    `<b>最新信号日</b> ${last[6] || '-'} · <b>目标仓位</b> ${last[1]} · <b>投票数</b> ${last[2]}/3 · ` +
+    `<b>10/20/60日涨跌幅</b> ${last[3] == null ? '-' : pct(last[3],2)} / ${last[4] == null ? '-' : pct(last[4],2)} / ${last[5] == null ? '-' : pct(last[5],2)}`;
+})();
+
+function nearestDate(input){
+  if (!input) return dates[dates.length - 1];
+  const valid = dates.filter(d => d <= input);
+  return valid.length ? valid[valid.length - 1] : dates[0];
+}
+
+function renderPositions(){
+  const d = nearestDate(document.getElementById('pos_date').value);
+  document.getElementById('pos_date').value = d;
+  const rows = D.positions[d] || [];
+  const w = D.weights.find(r => r[0] === d);
+  document.getElementById('pos_info').innerHTML =
+    `<b>日期</b> ${d} · <b>总敞口</b> ${pct(w[12],1)} · <b>现金</b> ${pct(w[11],1)} · ` +
+    SLEEVES.map((s,i) => `<b>${SLEEVE_NAMES[s]}</b> ${pct(w[6+i],1)}`).join(' · ');
+  if (!rows.length) {
+    document.getElementById('pos_table').innerHTML = '<div style="padding:8px;color:#a0aab8">当日无持仓明细</div>';
+    return;
+  }
+  let h = '<table><tr><th class="l">代码</th><th class="l">名称</th><th>权重</th></tr>';
+  rows.forEach(([code, , weight]) => {
+    h += `<tr><td class="l">${code}</td><td class="l">${D.names[code] || code}</td><td>${pct(weight,2)}</td></tr>`;
+  });
+  h += '</table>';
+  document.getElementById('pos_table').innerHTML = h;
+}
+
+function renderRp(){
+  const d = nearestDate(document.getElementById('rp_date').value);
+  document.getElementById('rp_date').value = d;
+  const rp = D.rp_daily[d];
+  if (!rp) {
+    document.getElementById('rp_info').innerHTML = '无数据';
+    return;
+  }
+  document.getElementById('rp_info').innerHTML =
+    `<b>日期</b> ${d} · <b>池供给 S</b> ${pct(rp.S,2)} · <b>池需求 D</b> ${pct(rp.D,2)} · <b>紧俏</b> ${rp.tight ? '是' : '否'}`;
+  document.getElementById('rp_bar').innerHTML =
+    '<div class="wbar">' + SLEEVES.map((s,i) =>
+      `<div style="width:${rp.w[i]*100}%;background:${SLEEVE_COLORS[s]}" title="${SLEEVE_NAMES[s]} ${pct(rp.w[i],1)}"></div>`).join('') +
+    '</div><div class="wlegend">' + SLEEVES.map((s,i) =>
+      `<span><span style="display:inline-block;width:9px;height:9px;background:${SLEEVE_COLORS[s]};margin-right:3px"></span>${SLEEVE_NAMES[s]} ${pct(rp.w[i],1)}</span>`).join('') + '</div>';
+  let h = '<table><tr><th class="l">袖</th><th>底座权重</th><th>择时系数</th><th>池借款</th></tr>';
+  SLEEVES.forEach((s,i) => {
+    h += `<tr><td class="l">${SLEEVE_NAMES[s]}</td><td>${pct(rp.w[i],2)}</td><td>${rp.p[i].toFixed(3)}</td><td>${pct(rp.borrow[i],2)}</td></tr>`;
+  });
+  h += '</table>';
+  document.getElementById('rp_table').innerHTML = h;
+}
+
+document.getElementById('pos_date').value = dates[dates.length - 1];
+document.getElementById('rp_date').value = dates[dates.length - 1];
+renderPositions();
+renderRp();
+
+function renderLatestPre(){
+  const el = document.getElementById('latest_pre');
+  const today = new Date().toLocaleDateString('sv-SE');
+  const signals = D.signals || {};
+  const keys = Object.keys(signals)
+    .filter(k => (signals[k].t1_date || '9999-12-31') <= today).sort();
+  if (!keys.length) {
+    el.innerHTML = '<div class="none-tip">暂无已生效的 precompute 落盘数据；待生效的次日目标不提前展示。</div>';
+    return;
+  }
+  const t = keys[keys.length - 1];
+  const s = signals[t];
+  const ens = s.bond_ens;
+  const vol = s.volatility;
+  const er = ens.returns;
+  let h = `<div class="kv"><b>数据日 T</b>${t} · <b>目标生效日 T+1</b>${s.t1_date} · <b>五袖权重基准日</b>${s.base_weights_asof}</div>`;
+  h += `<div class="kv"><b>国债ENS</b>信号日 ${ens.signal_date} · ${ens.ens_votes}/3票 · 目标 ${ens.target_ens} · ` +
+       `10/20/60日 ${pct(er['10'],2)} / ${pct(er['20'],2)} / ${pct(er['60'],2)}</div>`;
+  h += `<div class="kv"><b>60日风险波动率</b>${vol.sigma_risky == null ? '-' : pct(vol.sigma_risky,2)} · ` +
+       `<b>k_raw</b>${vol.k_raw.toFixed(3)} · <b>k_cap</b>${vol.k_cap == null ? '-' : vol.k_cap.toFixed(3)} · <b>k_exec</b>${vol.k_exec.toFixed(3)}</div>`;
+  h += `<div class="kv"><b>共享池</b>供给 ${pct(s.pool.S,2)} · 需求 ${pct(s.pool.D,2)} · ${s.pool.tight ? '紧俏，按比例分配' : '不紧俏'}</div>`;
+  h += '<div class="table-wrap"><table><tr><th class="l">袖</th><th>底座权重</th><th>择时系数</th><th>池借款</th><th>底座仓位</th><th>最终目标仓位</th></tr>';
+  SLEEVES.forEach(key => {
+    h += `<tr><td class="l">${SLEEVE_NAMES[key]}</td><td>${pct(s.base_weights[key],2)}</td>` +
+         `<td>${s.p[key].toFixed(3)}</td><td>${pct(s.borrow[key],2)}</td>` +
+         `<td>${pct(s.base_pos[key],2)}</td><td>${pct(s.pos[key],2)}</td></tr>`;
+  });
+  h += '</table></div>';
+  h += `<div class="kv" style="margin-top:8px"><b>底座总敞口</b>${pct(s.base_total_exposure,2)} · ` +
+       `<b>目标总敞口</b>${pct(s.total_exposure,2)} · <b>外层现金</b>${pct(s.cash,2)} · ` +
+       `<b>商品原生现金</b>${pct(s.commodity_native_cash,2)} · <b>合计现金</b>${pct(s.total_cash,2)}</div>`;
+  h += '<div class="kv"><b>T+1 ETF目标持仓（占总资产）</b></div>';
+  if (s.t1_holdings.length) {
+    h += '<div class="table-wrap"><table><tr><th>#</th><th class="l">代码</th><th class="l">名称</th><th>权重</th></tr>';
+    s.t1_holdings.forEach(([code, , weight], i) => {
+      h += `<tr><td>${i+1}</td><td class="l">${code}</td><td class="l">${D.names[code] || code}</td><td>${pct(weight,2)}</td></tr>`;
+    });
+    h += '</table></div>';
+  } else {
+    h += '<div class="none-tip">无ETF持仓明细。</div>';
+  }
+  h += '<div class="kv" style="margin-top:8px"><b>上游数据日</b>' +
+       Object.entries(s.freshness).map(([key, value]) => `<span class="tag">${key} ${value}</span>`).join('') + '</div>';
+  el.innerHTML = h;
+}
+renderLatestPre();
+
+(function renderMonthly(){
+  const rows = D.nav;
+  const byYear = {};
+  rows.forEach(r => {
+    const y = r[0].slice(0,4), m = r[0].slice(5,7);
+    (byYear[y] = byYear[y] || {})[m] = r[1];
+  });
+  let prevNav = 1.0;
+  let h = '';
+  Object.keys(byYear).sort().forEach(y => {
+    const months = byYear[y];
+    const mkeys = Object.keys(months).sort();
+    const yearStart = prevNav;
+    const parts = [];
+    mkeys.forEach(m => {
+      const navv = months[m];
+      const mr = navv / prevNav - 1;
+      parts.push([m, mr, navv]);
+      prevNav = navv;
+    });
+    const yearRet = prevNav / yearStart - 1;
+    const winRate = parts.filter(p => p[1] > 0).length / parts.length;
+    const rowsHtml = parts.map(([m, mr]) =>
+      `<tr><td class="l">${y}-${m}</td><td class="${mr >= 0 ? 'pos' : 'neg'}">${pct(mr,2)}</td></tr>`).join('');
+    h += `<details class="year-block"><summary>${y} 年 · 收益 ${pct(yearRet,2)} · 月胜率 ${pct(winRate,0)}</summary>` +
+         `<table><tr><th class="l">月份</th><th>收益</th></tr>${rowsHtml}</table></details>`;
+  });
+  document.getElementById('monthly').innerHTML = h;
+})();
+
+(function renderPerf(){
+  const perf = D.performance;
+  const segs = [...new Set(perf.map(r => r.segment))];
+  let h = '<table><tr><th class="l">分段</th><th class="l">策略</th><th>累计收益</th><th>几何年化</th><th>年化波动</th><th>Sharpe</th><th>最大回撤</th><th>卡玛</th><th>日胜率</th><th>平均敞口</th><th>平均国债仓位</th></tr>';
+  segs.forEach(seg => {
+    perf.filter(r => r.segment === seg).forEach(r => {
+      h += `<tr><td class="l">${seg}</td><td class="l">${r.strategy}</td>` +
+           `<td>${pct(r.total_return,1)}</td><td>${pct(r.geom_ann,2)}</td><td>${pct(r.ann_vol,2)}</td>` +
+           `<td>${r.sharpe_rf0.toFixed(2)}</td><td>${pct(r.max_drawdown,2)}</td><td>${r.calmar.toFixed(2)}</td>` +
+           `<td>${pct(r.win_rate,1)}</td><td>${pct(r.mean_exposure,1)}</td><td>${pct(r.mean_bond_pos,1)}</td></tr>`;
+    });
+  });
+  h += '</table>';
+  document.getElementById('perf_table').innerHTML = h;
+})();
+</script>
+</body>
+</html>
