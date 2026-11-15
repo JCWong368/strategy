@@ -54,7 +54,7 @@
   <a href="../无杠杆5%_五袖ENS/index.html">无杠杆5%五袖ENS</a>
   <a class="cur" href="../5%风险预算周度调仓/index.html">5%风险预算周度调仓</a>
 </div>
-<h1>5%风险预算周度调仓 <span style="font-size:13px;color:#8492a6;font-weight:400">五袖RP+ENS · 60日波动率目标5% · 每周首个A股交易日开盘调仓 · 周内自然漂移</span></h1>
+<h1>5%风险预算周度调仓 <span style="font-size:13px;color:#8492a6;font-weight:400">五袖RP+ENS · A股仅N20四态（2026-11-16起） · 60日波动率目标5% · 每周首个A股交易日开盘调仓 · 周内自然漂移</span></h1>
 <div class="sub" id="range"></div>
 <div class="cards" id="metrics"></div>
 
@@ -103,7 +103,7 @@
 <div class="panel"><h2>分段绩效对比</h2><div class="table-wrap"><div id="perf_table"></div></div></div>
 <div class="panel">
   <h2>口径与风险注记</h2>
-  <div class="warning">A股五ETF、港股两ETF等权；全球和商品保留原内部规则。上市前含指数模拟，当前活跃度倒选历史ETF存在后视选择偏差，全ETF共同窗口较短。历史结果不构成样本外证明或投资建议。</div>
+  <div class="warning">2026-11-16起A股袖改用仅N20四态固定系数，不叠九态环境系数；日频原策略和指数周频对照仍保留九态口径。A股五ETF、港股两ETF等权；全球和商品保留原内部规则。上市前含指数模拟，当前活跃度倒选历史ETF存在后视选择偏差，全ETF共同窗口较短。历史结果不构成样本外证明或投资建议。</div>
   <div class="note" id="instruments"></div>
 </div>
 
@@ -112,7 +112,7 @@ const D = window.STRATEGY_DATA;
 const SLEEVES = ['a','hk','gl','cmd','bond'];
 const NAMES = {a:'A股',hk:'港股',gl:'全球',cmd:'商品',bond:'国债'};
 const COLORS = {a:'#5470c6',hk:'#91cc75',gl:'#ee6666',cmd:'#fac858',bond:'#9b59b6'};
-const COMPARE_NAMES = {weekly:'ETF周频',index_weekly:'指数周频研究对照',original_target:'原每日5%策略'};
+const COMPARE_NAMES = {weekly:'ETF周频（A股仅N20）',index_weekly:'指数周频研究对照（九态）',original_target:'原每日5%策略（九态，未改）'};
 const COMPARE_COLORS = {weekly:'#5470c6',index_weekly:'#91cc75',original_target:'#ee6666'};
 const pct = (x,d=1) => x == null ? '-' : (x*100).toFixed(d)+'%';
 const num = (x,d=2) => x == null ? '-' : (+x).toFixed(d);
