@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>风险平价2.8 商品双择时 策略展示</title>
 <script src="echarts.min.js"></script>
-<script src="data.js"></script>
+<script src="data.js?v=1794879840"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f4f6fa; color: #2b3445; padding: 16px; }
@@ -46,6 +46,24 @@
   details.year-block { margin: 6px 0; border: 1px solid #edf0f5; border-radius: 6px; padding: 8px 10px; }
   details.year-block summary { cursor: pointer; font-size: 13px; color: #33415c; }
   details.year-block table { margin-top: 8px; }
+  #chart_standalone,#chart_ref,#chart_hp,#chart_overall,#chart_asset,#chart_aenv,#chart_hk,#chart_beta,#chart_z { width: 100%; height: 320px; }
+  .bz-cards { display: grid; grid-template-columns: repeat(auto-fit,minmax(210px,1fr)); gap: 10px; margin: 10px 0 14px; }
+  .bz-card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; background: #fafbfc; }
+  .bz-card .nm { font-size: 13px; font-weight: 600; color: #33415c; }
+  .bz-card .dt { font-size: 11px; color: #8492a6; margin: 2px 0 6px; }
+  .bz-card .nums { display: flex; gap: 16px; font-size: 13px; line-height: 1.8; }
+  .bz-card .nums b { font-size: 18px; color: #2b3445; }
+  .bz-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width:900px) { .bz-charts { grid-template-columns: 1fr; } }
+  .hk-current { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: 8px 0 12px; }
+  .hk-current .big { font-size: 30px; font-weight: 700; color: #5470c6; }
+  .hk-current .cell { font-size: 17px; font-weight: 600; }
+  .hk-state-band { display: flex; width: 100%; height: 18px; overflow: hidden; border-radius: 4px; margin: 5px 0; }
+  .hk-state-seg { min-width: 1px; height: 100%; }
+  .hk-swatch { display: inline-block; width: 9px; height: 9px; margin-right: 3px; border-radius: 2px; }
+  .hk-legend { display: flex; flex-wrap: wrap; gap: 5px 10px; font-size: 10px; color: #5a6a85; margin: 5px 0 8px; }
+  .toolbar select { padding: 4px 8px; border: 1px solid #d0d7e2; border-radius: 5px; background: #fff; font-size: 13px; }
+  .toolbar button.on { background: #5470c6; border-color: #5470c6; color: #fff; }
 </style>
 </head>
 <body>
@@ -64,8 +82,59 @@
   <div id="chart_nav"></div>
 </div>
 <div class="panel"><h2>回撤</h2><div id="chart_dd"></div></div>
+<div class="panel">
+  <h2>子策略独立运行表现（含择时，不含RP / 共享池 / 国债）</h2>
+  <div class="note" style="margin-bottom:8px">各曲线独立归一，均为子策略原生净值；不乘RP权重、不配置国债。商品原生内部费用为0，其他子策略保留各自费用与现金口径。</div>
+  <div class="toolbar"><label><input type="checkbox" id="standalone_log"> 对数坐标</label></div>
+  <div id="chart_standalone"></div>
+  <div class="table-wrap" id="standalone_metrics"></div>
+  <h2 style="margin-top:14px">分年度收益</h2><div class="table-wrap" id="standalone_yearly"></div>
+  <div class="note" id="standalone_notes" style="margin-top:8px"></div>
+</div>
+<div class="panel">
+  <h2>满仓参考基准（独立展示）</h2>
+  <div class="warning">满仓参考，不含择时、RP、共享池或国债配置，不参与2.8净值计算，不是可交易建议。</div>
+  <div id="chart_ref"></div><div class="table-wrap" id="ref_metrics"></div>
+</div>
+<div class="panel">
+  <h2>持有期收益分布（任意交易日买入并持有6 / 12个月）</h2>
+  <div id="hp_stats"></div><div id="chart_hp"></div>
+</div>
 <div class="panel"><h2>月度绩效（分年展开）</h2><div id="monthly"></div></div>
 <div class="panel"><h2>四袖 + 511130 + 现金</h2><div id="chart_w"></div></div>
+
+<div class="panel">
+  <h2>商品双择时（外层整体N20 × 袖内品种N60）</h2>
+  <div class="note" style="margin-bottom:8px">整体N20仅作用于四袖组合层 `p_cmd`；品种N60只在商品袖内决定归一化权重，不重复相乘。历史信号按信号计算日展示。</div>
+  <div id="cmd_current"></div>
+  <div class="toolbar"><span class="sub" style="margin:0">历史窗口：</span><button data-cmd-window="60">60日</button><button data-cmd-window="250" class="on">250日</button><button data-cmd-window="0">全部</button></div>
+  <div id="chart_overall"></div>
+  <div class="toolbar"><label>品种 <select id="cmd_asset"></select></label></div>
+  <div id="chart_asset"></div>
+  <div class="table-wrap" id="cmd_diagnostics"></div>
+</div>
+<div class="panel">
+  <h2>A股与全球 · beta / Z信号参数</h2>
+  <div class="bz-cards" id="bz_cards"></div>
+  <div class="toolbar"><label>历史对象 <select id="bz_select"></select></label><span class="sub" style="margin:0">时间轴：</span><button data-bz-window="60">60日</button><button data-bz-window="250" class="on">250日</button><button data-bz-window="0">全部</button></div>
+  <div class="bz-charts"><div id="chart_beta"></div><div id="chart_z"></div></div>
+</div>
+<div class="panel">
+  <h2>A股袖 · 九态环境状态</h2>
+  <div class="hk-current" id="aenv_current"></div>
+  <div class="note">N20固定系数 × 九态环境系数；历史按环境标签日，不做T+1位移。</div>
+  <div class="toolbar"><span class="sub" style="margin:0">历史：</span><button data-aenv-window="60">60日</button><button data-aenv-window="250" class="on">250日</button><button data-aenv-window="0">全部</button></div>
+  <div class="hk-state-band" id="aenv_band"></div><div class="hk-legend" id="aenv_legend"></div>
+  <div id="chart_aenv"></div>
+</div>
+<div class="panel">
+  <h2>港股袖 · 九态择时仓位系数</h2>
+  <div class="hk-current" id="hk_current"></div>
+  <div class="note">系数是港股袖自身仓位，不是占总资产比例；历史按生效日，最新信号按标签日。</div>
+  <div class="toolbar"><span class="sub" style="margin:0">历史：</span><button data-hk-window="60">60日</button><button data-hk-window="250" class="on">250日</button><button data-hk-window="0">全部</button></div>
+  <div class="hk-state-band" id="hk_band"></div><div class="hk-legend" id="hk_legend"></div>
+  <div id="chart_hk"></div>
+</div>
 
 <div class="panel">
   <h2>指定日期详情（历史回溯）</h2>
@@ -77,8 +146,13 @@
 </div>
 
 <div class="panel">
-  <h2>最新实际生效的 precompute（次日持仓）</h2>
-  <div class="note" style="margin-bottom:8px">每日06:00使用前一交易日收盘与今晨海外数据生成T+1目标；强制使用T日富易账户导出并校验T/T+1。只展示已生效结果。precompute完成后生成整百股持仓及富易开盘前指令。</div>
+  <h2>生产执行状态（整百股与开盘前指令）</h2>
+  <div id="execution_status"></div>
+</div>
+<div class="panel">
+  <h2>Precompute（最新实际生效 / 历史回溯）</h2>
+  <div class="note" style="margin-bottom:8px">每日06:00使用前一交易日收盘与今晨海外数据生成T+1目标；强制使用T日富易账户导出并校验T/T+1。默认展示最新已生效结果，也可切换历史落盘。precompute完成后生成整百股持仓及富易开盘前指令。</div>
+  <div class="toolbar"><label>信号数据日T <select id="pre_date"></select></label><button id="pre_latest">最新已生效</button></div>
   <div id="latest_pre"></div>
 </div>
 <div class="panel"><h2>分段绩效对比</h2><div class="table-wrap"><div id="perf_table"></div></div></div>
@@ -105,6 +179,41 @@ const ddChart=echarts.init(document.getElementById('chart_dd'));
 ddChart.setOption({tooltip:{trigger:'axis',formatter:ps=>{let h=ps[0].axisValue;ps.forEach(p=>h+=`<br/>${p.marker}${p.seriesName}: ${pct(p.value[1],2)}`);return h;}},grid:{left:50,right:30,top:30,bottom:60},xAxis:{type:'time'},yAxis:{type:'value',max:0,axisLabel:{formatter:v=>pct(v,0)}},dataZoom:[{type:'inside'},{type:'slider',height:18,bottom:8}],series:[{name:'风险平价2.8',type:'line',data:D.nav.map(r=>[r[0],r[3]]),showSymbol:false,color:'#ee6666',areaStyle:{opacity:.12}}]});
 echarts.connect([navChart,ddChart]);
 
+// ---------- 子策略独立绩效 ----------
+const standaloneChart=echarts.init(document.getElementById('chart_standalone'));
+const standaloneItems=D.standalone_strategies.items;
+const standaloneColors={a:'#5470c6',hk:'#91cc75',gl:'#ee6666',cmd:'#fac858'};
+function standaloneOption(){
+  return {tooltip:{trigger:'axis',formatter:ps=>{let h=ps[0].axisValue;ps.forEach(p=>h+=`<br/>${p.marker}${p.seriesName}: ${(+p.value[1]).toFixed(4)}`);return h;}},legend:{top:0},grid:{left:50,right:30,top:45,bottom:60},xAxis:{type:'time'},yAxis:{type:document.getElementById('standalone_log').checked?'log':'value',scale:true},dataZoom:[{type:'inside'},{type:'slider',height:18,bottom:8}],
+    series:Object.entries(standaloneItems).map(([key,item])=>({name:item.short_name,type:'line',data:item.series.map(r=>[r[0],r[1]]),showSymbol:false,connectNulls:false,color:standaloneColors[key]}))};
+}
+standaloneChart.setOption(standaloneOption());document.getElementById('standalone_log').onchange=()=>standaloneChart.setOption(standaloneOption(),true);
+(function(){
+  let h='<table><tr><th class="l">策略</th><th>累计收益</th><th>几何年化</th><th>年化波动</th><th>Sharpe</th><th>最大回撤</th><th>卡玛</th><th>日胜率</th><th>平均仓位</th></tr>';
+  Object.values(standaloneItems).forEach(item=>{const m=item.metrics;h+=`<tr><td class="l">${item.name}</td><td>${pct(m.total_return)}</td><td>${pct(m.annual_return)}</td><td>${pct(m.annual_vol)}</td><td>${m.sharpe.toFixed(2)}</td><td>${pct(m.max_drawdown)}</td><td>${m.calmar==null?'-':m.calmar.toFixed(2)}</td><td>${pct(m.win_rate)}</td><td>${pct(m.avg_exposure)}</td></tr>`;});
+  document.getElementById('standalone_metrics').innerHTML=h+'</table>';
+  const years=[...new Set(Object.values(standaloneItems).flatMap(item=>Object.keys(item.yearly)))].sort();let y='<table><tr><th class="l">策略</th>'+years.map(v=>`<th>${v}</th>`).join('')+'</tr>';
+  Object.values(standaloneItems).forEach(item=>{y+=`<tr><td class="l">${item.short_name}</td>`+years.map(v=>`<td>${item.yearly[v]==null?'-':pct(item.yearly[v])}</td>`).join('')+'</tr>';});
+  document.getElementById('standalone_yearly').innerHTML=y+'</table>';
+  document.getElementById('standalone_notes').innerHTML=Object.values(standaloneItems).map(item=>`<b>${item.short_name}</b>：${item.definition} ${item.notes.join('；')}<br>`).join('');
+})();
+
+// ---------- 满仓参考基准 ----------
+const refChart=echarts.init(document.getElementById('chart_ref'));
+const refItems=D.reference_benchmarks||{},refPalette=['#5470c6','#91cc75','#ee6666','#fac858','#9b59b6'];
+refChart.setOption({tooltip:{trigger:'axis',formatter:ps=>{let h=ps[0].axisValue;ps.forEach(p=>h+=`<br/>${p.marker}${p.seriesName}: ${p.value[1]==null?'-':(+p.value[1]).toFixed(4)}`);return h;}},legend:{top:0},grid:{left:50,right:30,top:45,bottom:60},xAxis:{type:'time'},yAxis:{type:'value',scale:true},dataZoom:[{type:'inside'},{type:'slider',height:18,bottom:8}],series:Object.values(refItems).map((item,i)=>({name:item.name,type:'line',data:item.nav,showSymbol:false,connectNulls:false,color:refPalette[i%refPalette.length]}))});
+(function(){let h='<table><tr><th class="l">基准</th><th>累计收益</th><th>几何年化</th><th>年化波动</th><th>Sharpe</th><th>最大回撤</th><th>卡玛</th><th>日胜率</th><th>缺失日</th></tr>';Object.values(refItems).forEach(item=>{const m=item.metrics;h+=`<tr><td class="l">${item.name}</td><td>${pct(m.total_return)}</td><td>${pct(m.annual_return)}</td><td>${pct(m.annual_vol)}</td><td>${m.sharpe.toFixed(2)}</td><td>${pct(m.max_drawdown)}</td><td>${m.calmar==null?'-':m.calmar.toFixed(2)}</td><td>${pct(m.win_rate)}</td><td>${item.data_quality.missing_count}</td></tr>`;});document.getElementById('ref_metrics').innerHTML=h+'</table>';})();
+
+// ---------- 持有期收益分布 ----------
+(function(){
+  const navs=D.nav.map(r=>r[1]),defs=[['6个月',126,'#5470c6'],['12个月',252,'#91cc75']];
+  const groups=defs.map(([label,days,color])=>{const rets=[];for(let i=days;i<navs.length;i++)rets.push(navs[i]/navs[i-days]-1);return{label,color,rets};});
+  const stat=a=>{const s=[...a].sort((x,y)=>x-y),med=s.length%2?s[(s.length-1)/2]:(s[s.length/2-1]+s[s.length/2])/2;return{n:a.length,mean:a.reduce((x,y)=>x+y,0)/a.length,med,min:s[0],max:s[s.length-1],win:a.filter(x=>x>0).length/a.length};};
+  let st='<table><tr><th class="l">持有期</th><th>样本数</th><th>均值</th><th>中位数</th><th>最好</th><th>最差</th><th>正收益占比</th></tr>';groups.forEach(({label,rets})=>{const t=stat(rets);st+=`<tr><td class="l">${label}</td><td>${t.n}</td><td>${pct(t.mean)}</td><td>${pct(t.med)}</td><td>${pct(t.max)}</td><td>${pct(t.min)}</td><td>${pct(t.win)}</td></tr>`;});document.getElementById('hp_stats').innerHTML=st+'</table>';
+  const all=groups.flatMap(g=>g.rets),lo=Math.floor(Math.min(...all)/.05)*.05,hi=Math.ceil(Math.max(...all)/.05)*.05,bins=[];for(let b=lo;b<hi-1e-9;b+=.05)bins.push([b,b+.05]);
+  const hpChart=echarts.init(document.getElementById('chart_hp'));hpChart.setOption({animation:false,tooltip:{trigger:'axis'},legend:{top:0},grid:{left:50,right:20,top:30,bottom:30},xAxis:{type:'category',data:bins.map(([a])=>(a*100).toFixed(0)+'%'),name:'持有期收益'},yAxis:{type:'value',name:'次数'},series:groups.map(({label,color,rets})=>({name:label,type:'bar',color,data:bins.map(([a,b])=>rets.filter(r=>r>=a&&r<b).length)}))});window.addEventListener('resize',()=>hpChart.resize());
+})();
+
 (function(){const rows=D.nav,byYear={};rows.forEach(r=>{const y=r[0].slice(0,4),m=r[0].slice(5,7);(byYear[y]=byYear[y]||{})[m]=r[1];});let prev=1,h='';Object.keys(byYear).sort().forEach(y=>{const months=byYear[y],start=prev,parts=[];Object.keys(months).sort().forEach(m=>{const v=months[m],ret=v/prev-1;parts.push([m,ret]);prev=v;});const yr=prev/start-1,wins=parts.filter(p=>p[1]>0).length/parts.length;h+=`<details class="year-block"><summary>${y}年 · 收益${pct(yr,2)} · 月胜率${pct(wins,0)}</summary><table><tr><th class="l">月份</th><th>收益</th></tr>`+parts.map(([m,r])=>`<tr><td class="l">${y}-${m}</td><td>${pct(r,2)}</td></tr>`).join('')+'</table></details>';});document.getElementById('monthly').innerHTML=h;})();
 
 const wChart=echarts.init(document.getElementById('chart_w'));
@@ -112,6 +221,71 @@ const wSeries=[];SLEEVES.forEach((s,i)=>wSeries.push({name:SN[s],type:'line',sta
 wSeries.push({name:'511130',type:'line',stack:'w',data:D.weights.map(r=>[r[0],r[9]]),showSymbol:false,color:'#9b59b6',areaStyle:{opacity:.65},lineStyle:{width:.5}});
 wSeries.push({name:'现金',type:'line',stack:'w',data:D.weights.map(r=>[r[0],r[10]]),showSymbol:false,color:'#c0c8d4',areaStyle:{opacity:.65},lineStyle:{width:.5}});
 wChart.setOption({tooltip:{trigger:'axis',formatter:ps=>{let h=ps[0].axisValue;ps.forEach(p=>h+=`<br/>${p.marker}${p.seriesName}: ${pct(p.value[1],2)}`);return h;}},legend:{top:0},grid:{left:50,right:30,top:45,bottom:60},xAxis:{type:'time'},yAxis:{type:'value',axisLabel:{formatter:v=>pct(v,0)}},dataZoom:[{type:'inside'},{type:'slider',height:18,bottom:8}],series:wSeries});
+
+// ---------- 商品双择时 ----------
+const cmdData=D.commodity_dual,cmdOverall=cmdData.overall,cmdAssets=cmdData.assets;
+let cmdWindow=250;
+const cmdLastOverall=cmdOverall[cmdOverall.length-1];
+document.getElementById('cmd_current').innerHTML=`<div class="hk-current"><span class="big">${pct(cmdLastOverall[4],0)}</span><span class="cell">整体N20：${cmdLastOverall[3]}</span><span class="tag">${cmdLastOverall[0]}</span></div>`+
+  `<div class="bz-cards">`+Object.entries(cmdData.latest).map(([code,row])=>`<div class="bz-card"><div class="nm">${cmdData.names[code]} ${code}</div><div class="dt">${row[0]} · N60 ${row[3]}</div><div class="nums"><span>系数<br><b>${row[4].toFixed(2)}</b></span><span>RP目标<br><b>${pct(row[5],2)}</b></span><span>袖内权重<br><b>${pct(row[6],2)}</b></span></div></div>`).join('')+`</div>`;
+const overallChart=echarts.init(document.getElementById('chart_overall')),assetChart=echarts.init(document.getElementById('chart_asset'));
+function renderOverall(){
+  const rows=cmdWindow?cmdOverall.slice(-cmdWindow):cmdOverall;
+  overallChart.setOption({tooltip:{trigger:'axis',formatter:ps=>{let h=ps[0].axisValue;ps.forEach(p=>h+=`<br/>${p.marker}${p.seriesName}: ${(+p.value[1]).toFixed(3)}`);return h;}},legend:{top:0},grid:{left:55,right:55,top:45,bottom:55},xAxis:{type:'time'},yAxis:[{type:'value',name:'beta/Z'},{type:'value',name:'p_cmd',min:0,max:1}],dataZoom:[{type:'inside'},{type:'slider',height:18,bottom:5}],
+    series:[{name:'beta',type:'line',data:rows.map(r=>[r[0],r[1]]),showSymbol:false,connectNulls:false,color:'#5470c6'},{name:'Z',type:'line',data:rows.map(r=>[r[0],r[2]]),showSymbol:false,connectNulls:false,color:'#ee6666'},{name:'整体N20 p_cmd',type:'line',step:'start',data:rows.map(r=>[r[0],r[4]]),showSymbol:false,yAxisIndex:1,color:'#fac858'}]},true);
+}
+function renderAsset(){
+  const code=document.getElementById('cmd_asset').value;
+  const all=cmdAssets[code]||[];
+  const rows=cmdWindow?all.slice(-cmdWindow):all;
+  const option={
+    tooltip:{trigger:'axis',formatter:ps=>{
+      let h=ps[0].axisValue;
+      ps.forEach(p=>h+=`<br/>${p.marker}${p.seriesName}: ${(+p.value[1]).toFixed(3)}`);
+      return h;
+    }},
+    legend:{top:0},
+    grid:{left:55,right:55,top:45,bottom:55},
+    xAxis:{type:'time'},
+    yAxis:[
+      {type:'value',name:'N60系数'},
+      {type:'value',name:'袖内权重',axisLabel:{formatter:v=>pct(v,0)}}
+    ],
+    dataZoom:[{type:'inside'},{type:'slider',height:18,bottom:5}],
+    series:[
+      {name:'N60系数',type:'line',step:'start',data:rows.map(r=>[r[0],r[4]]),showSymbol:false,connectNulls:false,color:'#5470c6'},
+      {name:'最终袖内权重',type:'line',data:rows.map(r=>[r[0],r[6]]),showSymbol:false,yAxisIndex:1,color:'#fac858'}
+    ]
+  };
+  assetChart.setOption(option,true);
+}
+document.getElementById('cmd_asset').innerHTML=Object.keys(cmdAssets).map(code=>`<option value="${code}">${cmdData.names[code]} ${code}</option>`).join('');document.getElementById('cmd_asset').onchange=renderAsset;
+document.querySelectorAll('[data-cmd-window]').forEach(btn=>btn.onclick=()=>{cmdWindow=+btn.dataset.cmdWindow;document.querySelectorAll('[data-cmd-window]').forEach(b=>b.classList.toggle('on',b===btn));renderOverall();renderAsset();});
+renderOverall();renderAsset();
+(function(){const x=cmdData.diagnostics;document.getElementById('cmd_diagnostics').innerHTML=`<table><tr><th class="l">口径</th><th>原生调仓天数</th><th>原生换手</th><th>原生费用</th><th>原生实际仓位均值</th><th>整体N20系数均值</th><th>整数手现金均值</th></tr><tr><td class="l">商品双择时</td><td>${x.dual_native_rebalance_days}</td><td>${x.dual_native_turnover_total.toFixed(2)}倍</td><td>${pct(x.dual_native_fee_total,3)}</td><td>${pct(x.dual_native_actual_position_mean,2)}</td><td>${pct(x.dual_native_overall_coefficient_mean,2)}</td><td>${pct(x.dual_native_cash_weight_mean,3)}</td></tr></table>`;})();
+
+// ---------- A股与全球 beta/Z ----------
+const bzData=D.beta_z||{},bzKeys=Object.keys(bzData),bzStateName={A:'上升加速',B:'上升减速',C:'下降加速',D:'下降减速'};
+let bzKey=bzKeys[0],bzWindow=250;const bzNum=v=>v==null?'—':(+v).toFixed(3),betaChart=echarts.init(document.getElementById('chart_beta')),zChart=echarts.init(document.getElementById('chart_z'));
+document.getElementById('bz_cards').innerHTML=bzKeys.map(key=>{const item=bzData[key],valid=item.rows.filter(r=>r[1]!=null&&r[2]!=null);if(!valid.length)return'';const last=valid[valid.length-1];return`<div class="bz-card"><div class="nm">${item.sleeve}｜${item.name}</div><div class="dt">${last[0]} · ${item.window} · ${bzStateName[last[3]]||'—'}</div><div class="nums"><span>beta<br><b>${bzNum(last[1])}</b></span><span>Z<br><b>${bzNum(last[2])}</b></span></div></div>`;}).join('');
+document.getElementById('bz_select').innerHTML=bzKeys.map(key=>{const item=bzData[key];return`<option value="${key}">${item.sleeve}｜${item.name}</option>`;}).join('');
+function bzOption(param,label,color){const item=bzData[bzKey],rows=bzWindow?item.rows.slice(-bzWindow):item.rows;return{tooltip:{trigger:'axis',formatter:ps=>{if(!ps.length)return'';const r=rows[ps[0].dataIndex];return r?`${r[0]}<br>${label}: <b>${bzNum(r[param])}</b><br>状态：${bzStateName[r[3]]||'—'}`:'';}},grid:{left:55,right:20,top:30,bottom:48},xAxis:{type:'time'},yAxis:{type:'value',scale:true,name:label},dataZoom:[{type:'inside'},{type:'slider',height:18,bottom:5}],series:[{name:label,type:'line',data:rows.map(r=>[r[0],r[param]]),showSymbol:false,connectNulls:false,color}]};}
+function renderBZ(){betaChart.setOption(bzOption(1,'beta','#5470c6'),true);zChart.setOption(bzOption(2,'Z','#ee6666'),true);}
+document.getElementById('bz_select').onchange=e=>{bzKey=e.target.value;renderBZ();};document.querySelectorAll('[data-bz-window]').forEach(btn=>btn.onclick=()=>{bzWindow=+btn.dataset.bzWindow;document.querySelectorAll('[data-bz-window]').forEach(b=>b.classList.toggle('on',b===btn));renderBZ();});renderBZ();
+
+// ---------- A股九态环境 ----------
+const aenvData=D.a_environment,aenvRows=aenvData.rows,aenvColors={'震荡×高波':'#c43c39','震荡×中波':'#e89b5b','震荡×低波':'#f1d38a','下跌趋势×高波':'#8e4a9e','下跌趋势×中波':'#6a6f8f','下跌趋势×低波':'#4d6c8a','上涨趋势×高波':'#d65f5f','上涨趋势×中波':'#91cc75','上涨趋势×低波':'#3d9b73'};
+let aenvWindow=250;const aenvChart=echarts.init(document.getElementById('chart_aenv'));
+function renderBand(id,rows,colors){const segments=[];let start=0;for(let i=1;i<=rows.length;i++){if(i<rows.length&&rows[i][1]===rows[start][1])continue;const value=rows[start][1],days=i-start;segments.push(`<div class="hk-state-seg" style="flex:${days};background:${colors[value]||'#e2e8f0'}" title="${rows[start][0]}~${rows[i-1][0]}｜${value||'无数据'}｜${days}日"></div>`);start=i;}document.getElementById(id).innerHTML=segments.join('');}
+function renderAenvCurrent(){const valid=aenvRows.filter(r=>r[1]!=null),last=valid[valid.length-1];document.getElementById('aenv_current').innerHTML=`<span class="big">${last[4]==null?'—':pct(last[4],0)}</span><span class="cell">${last[1]}</span><span class="tag">${last[0]}</span><span class="tag">${last[5]}</span>`;}
+function renderAenv(){const rows=aenvWindow?aenvRows.slice(-aenvWindow):aenvRows;renderBand('aenv_band',rows,aenvColors);document.getElementById('aenv_legend').innerHTML=Object.entries(aenvColors).map(([cell,color])=>`<span><i class="hk-swatch" style="background:${color}"></i>${cell}</span>`).join('');aenvChart.setOption({tooltip:{trigger:'axis',formatter:ps=>{if(!ps.length)return'';const r=rows[ps[0].dataIndex];return r?`${r[0]}<br>环境系数：${r[4]==null?'—':pct(r[4],0)}<br>九态：${r[1]||'—'}<br>状态：${r[5]}`:'';}},grid:{left:55,right:20,top:30,bottom:50},xAxis:{type:'time'},yAxis:{type:'value',min:0,max:1,name:'环境系数',axisLabel:{formatter:v=>pct(v,0)}},dataZoom:[{type:'inside'},{type:'slider',height:18,bottom:5}],series:[{name:'环境系数',type:'line',step:'start',data:rows.map(r=>[r[0],r[4]]),showSymbol:false,connectNulls:false,color:'#5470c6'}]},true);}
+document.querySelectorAll('[data-aenv-window]').forEach(btn=>btn.onclick=()=>{aenvWindow=+btn.dataset.aenvWindow;document.querySelectorAll('[data-aenv-window]').forEach(b=>b.classList.toggle('on',b===btn));renderAenv();});renderAenvCurrent();renderAenv();
+
+// ---------- 港股九态择时 ----------
+const hkData=D.hk_timing,hkRows=hkData.rows;let hkWindow=250;const hkChart=echarts.init(document.getElementById('chart_hk'));
+(function(){const last=hkRows[hkRows.length-1],sig=hkData.latest_signal;document.getElementById('hk_current').innerHTML=`<span class="big">${pct(last[1],0)}</span><span class="cell">当前生效 ${last[0]}</span><span class="tag">最新信号 ${sig.date} ${sig.cell} → ${pct(sig.coef,0)} · T+1 ${sig.effective_date}</span>`;})();
+function renderHK(){const rows=hkWindow?hkRows.slice(-hkWindow):hkRows;renderBand('hk_band',rows,aenvColors);document.getElementById('hk_legend').innerHTML=Object.entries(aenvColors).map(([cell,color])=>`<span><i class="hk-swatch" style="background:${color}"></i>${cell}</span>`).join('');hkChart.setOption({tooltip:{trigger:'axis',formatter:ps=>{if(!ps.length)return'';const r=rows[ps[0].dataIndex];return r?`${r[0]}<br>仓位系数：${pct(r[1],0)}<br>九态：${r[2]||'—'}<br>状态：${r[5]}`:'';}},grid:{left:55,right:20,top:30,bottom:50},xAxis:{type:'time'},yAxis:{type:'value',min:0,max:1,name:'港股仓位系数',axisLabel:{formatter:v=>pct(v,0)}},dataZoom:[{type:'inside'},{type:'slider',height:18,bottom:5}],series:[{name:'港股仓位系数',type:'line',step:'start',data:rows.map(r=>[r[0],r[1]]),showSymbol:false,connectNulls:false,color:'#5470c6'}]},true);}
+document.querySelectorAll('[data-hk-window]').forEach(btn=>btn.onclick=()=>{hkWindow=+btn.dataset.hkWindow;document.querySelectorAll('[data-hk-window]').forEach(b=>b.classList.toggle('on',b===btn));renderHK();});renderHK();
 
 let curIdx=dates.length-1;
 function nearestIdx(input){if(!input)return dates.length-1;const valid=dates.filter(d=>d<=input);return valid.length?valid.length-1:0;}
@@ -126,20 +300,35 @@ document.getElementById('prev').onclick=()=>{document.getElementById('datepick')
 document.getElementById('next').onclick=()=>{document.getElementById('datepick').value=dates[Math.min(dates.length-1,curIdx+1)];renderDetail();};
 document.getElementById('datepick').onchange=renderDetail;document.getElementById('datepick').value=dates[curIdx];renderDetail();
 
-function renderLatestPre(){
+function renderLatestPre(t){
   const el=document.getElementById('latest_pre'),today=new Date().toLocaleDateString('sv-SE');const keys=Object.keys(D.signals).filter(k=>(D.signals[k].t1_date||'9999-12-31')<=today).sort();
-  if(!keys.length){el.innerHTML='<div class="none-tip">暂无已生效的precompute落盘数据。</div>';return;}
-  const t=keys[keys.length-1],s=D.signals[t],info=s.rp_info;let h=`<div class="kv"><b>数据日T</b>${t} · <b>目标生效日T+1</b>${s.t1_date}</div>`;
+  if(!t&&!keys.length){el.innerHTML='<div class="none-tip">暂无已生效的precompute落盘数据。</div>';return;}
+  t=t||keys[keys.length-1];const s=D.signals[t],info=s.rp_info;let h=`<div class="kv"><b>数据日T</b>${t} · <b>目标生效日T+1</b>${s.t1_date}</div>`;
   h+='<div class="kv"><b>择时系数</b>'+SLEEVES.map(k=>`<span class="tag">${SN[k]} ${pct(info.p['p_'+k])}</span>`).join('')+'</div>';
   h+='<div class="kv"><b>共享池</b>'+`<span class="tag">供给 ${pct(info.pool.S,2)}</span><span class="tag">需求 ${pct(info.pool.D,2)}</span><span class="tag">${info.pool.tight?'紧俏':'不紧俏'}</span></div>`;
   h+='<div class="kv"><b>T+1目标仓位</b></div><table><tr><th class="l">模块</th><th>权重</th></tr>'+MODULES.map(([k,n])=>`<tr><td class="l">${n}</td><td>${pct(s.weights_t1[k]||0,2)}</td></tr>`).join('')+'</table>';
   h+='<div style="margin-top:10px">'+holdTable(s.t1_holdings)+'</div>';
   h+='<div class="kv"><b>数据状态</b>'+Object.entries(s.freshness).map(([k,v])=>`<span class="tag">${k} ${v}</span>`).join('')+'</div>';el.innerHTML=h;
 }
-renderLatestPre();
+(function(){
+  const x=D.execution_status||{};
+  document.getElementById('execution_status').innerHTML=x.available?
+    `<div class="kv"><b>数据日T</b>${x.t_date} · <b>目标日T+1</b>${x.t1_date} · <b>账户交易资产</b>${x.total_assets.toLocaleString('zh-CN',{maximumFractionDigits:2})}元</div>
+     <div class="kv"><b>整百股后市值</b>${x.used_mv.toLocaleString('zh-CN',{maximumFractionDigits:2})}元 · <b>现金残差</b>${x.residual_cash.toLocaleString('zh-CN',{maximumFractionDigits:2})}元（${pct(x.residual_pct,2)}） · <b>缩放权重合计</b>${pct(x.scaled_weight_sum,2)}</div>
+     <div class="kv"><b>开盘前指令</b>${x.order.exists?`${x.order.filename} · 买入${x.order.buy_count}条/${x.order.buy_qty}股 · 卖出${x.order.sell_count}条/${x.order.sell_qty}股 · 生成于${x.order.mtime}`:'尚未生成'}</div>`:
+    '<div class="none-tip">暂无整百股持仓或开盘前指令。</div>';
+})();
+(function initPrecompute(){
+  const select=document.getElementById('pre_date'),all=Object.keys(D.signals).sort().reverse();
+  select.innerHTML=all.map(t=>`<option value="${t}">${t} → ${D.signals[t].t1_date}</option>`).join('');
+  const today=new Date().toLocaleDateString('sv-SE'),effective=all.filter(t=>(D.signals[t].t1_date||'9999-12-31')<=today);
+  if(all.length){select.value=effective[0]||all[0];renderLatestPre(select.value);}
+  select.onchange=()=>renderLatestPre(select.value);
+  document.getElementById('pre_latest').onclick=()=>{if(effective.length){select.value=effective[0];renderLatestPre(select.value);}};
+})();
 
 (function(){let h='<table><tr><th class="l">分段</th><th class="l">策略</th><th>累计收益</th><th>几何年化</th><th>年化波动</th><th>Sharpe</th><th>最大回撤</th><th>卡玛</th><th>总换手</th></tr>';D.performance.forEach(r=>h+=`<tr><td class="l">${r.segment}</td><td class="l">${r.strategy}</td><td>${pct(r.total_return,2)}</td><td>${pct(r.geom_ann,2)}</td><td>${pct(r.ann_vol,2)}</td><td>${r.sharpe_rf0.toFixed(2)}</td><td>${pct(r.max_drawdown,2)}</td><td>${r.calmar.toFixed(2)}</td><td>${r.turnover_total.toFixed(2)}倍</td></tr>`);document.getElementById('perf_table').innerHTML=h+'</table>';})();
-window.addEventListener('resize',()=>{navChart.resize();ddChart.resize();wChart.resize();});
+window.addEventListener('resize',()=>{navChart.resize();ddChart.resize();wChart.resize();standaloneChart.resize();refChart.resize();overallChart.resize();assetChart.resize();betaChart.resize();zChart.resize();aenvChart.resize();hkChart.resize();});
 </script>
 </body>
 </html>

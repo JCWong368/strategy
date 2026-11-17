@@ -9,7 +9,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from build_rp2_data import load_names
+from build_rp2_data import load_names, build_a_environment, build_beta_z, build_hk_timing
+from build_rp2_reference_benchmarks import build_reference_benchmarks
+from build_rp28_panels import build_commodity_dual, build_execution_status, build_standalone
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -173,13 +175,31 @@ def main() -> None:
         "rp20": {"name": "风险平价2.0", "nav": [[str(r.date.date()), round(float(r.nav_rp20_rebased), 6),
                                                   round(float(r.drawdown_rp20), 6)] for r in nav.itertuples()]},
     }
+    signals = build_signals()
+    standalone = build_standalone(ROOT, [str(d.date()) for d in nav.date])
+    beta_z = {key: value for key, value in build_beta_z().items() if key in {"a", "gl"}}
+    commodity_dual = build_commodity_dual(ROOT)
+    execution_status = build_execution_status(ROOT)
+    reference_benchmarks = build_reference_benchmarks(ROOT, [str(d.date()) for d in nav.date])
     data = {"names": load_names(), "metrics": metrics, "nav": nav_rows, "weights": weight_rows,
             "rp_daily": rp_daily, "rebal_dates": [str(d.date()) for d in quarterly.rebal_date],
-            "benchmarks": benchmarks, "positions": positions, "signals": build_signals(),
-            "performance": perf.to_dict(orient="records")}
+            "benchmarks": benchmarks, "positions": positions, "signals": signals,
+            "performance": perf.to_dict(orient="records"),
+            "standalone_strategies": standalone, "beta_z": beta_z,
+            "a_environment": build_a_environment(),
+            "hk_timing": build_hk_timing(rp_daily, signals),
+            "reference_benchmarks": reference_benchmarks,
+            "commodity_dual": commodity_dual,
+            "execution_status": execution_status}
     OUT.parent.mkdir(parents=True, exist_ok=True)
     js = "window.STRATEGY_DATA = " + json.dumps(data, ensure_ascii=False, separators=(",", ":")) + ";"
     OUT.write_text(js, encoding="utf-8")
+    import re
+    import time
+    html_path = OUT.parent / "index.html"
+    html = html_path.read_text(encoding="utf-8")
+    html = re.sub(r'data\.js(?:\?v=\d+)?', f'data.js?v={int(time.time())}', html, count=1)
+    html_path.write_text(html, encoding="utf-8")
     print(f"写出{OUT}，{len(js)}字节，{len(nav_rows)}日，持仓偏差{max_dev:.3e}，"
           f"precompute {len(data['signals'])}份")
 
