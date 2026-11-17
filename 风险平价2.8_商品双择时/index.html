@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>风险平价2.8 商品双择时 策略展示</title>
 <script src="echarts.min.js"></script>
-<script src="data.js?v=1794879840"></script>
+<script src="data.js?v=1794883212"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f4f6fa; color: #2b3445; padding: 16px; }
@@ -30,6 +30,7 @@
   td.l, th.l { text-align: left; }
   .kv { font-size: 13px; line-height: 1.9; margin-bottom: 6px; }
   .kv b { color: #5a6a85; font-weight: 500; margin-right: 6px; }
+  .pos { color: #d63031; } .neg { color: #00b26a; }
   .note { color: #5a6a85; font-size: 12px; line-height: 1.8; }
   .warning { color: #a04700; background: #fff7e8; border: 1px solid #f0d7ae; border-radius: 6px; padding: 9px 11px; font-size: 13px; line-height: 1.7; margin-bottom: 8px; }
   .none-tip { color: #a0aab8; font-size: 13px; padding: 8px 0; }
@@ -291,7 +292,9 @@ let curIdx=dates.length-1;
 function nearestIdx(input){if(!input)return dates.length-1;const valid=dates.filter(d=>d<=input);return valid.length?valid.length-1:0;}
 function holdTable(list){if(!list||!list.length)return '<div class="none-tip">当日无持仓明细。</div>';const sum=list.reduce((s,x)=>s+(x[2]||0),0);let h=`<div class="kv"><b>持仓合计</b>${pct(sum,2)}</div><table><tr><th>#</th><th class="l">代码</th><th class="l">名称</th><th>权重</th></tr>`;list.forEach(([c,,w],i)=>h+=`<tr><td>${i+1}</td><td class="l">${c}</td><td class="l">${D.names[c]||c}</td><td>${pct(w,3)}</td></tr>`);return h+'</table>';}
 function renderDetail(){
-  curIdx=nearestIdx(document.getElementById('datepick').value);const d=dates[curIdx];document.getElementById('datepick').value=d;document.getElementById('curtip').textContent=`${curIdx+1}/${dates.length}`;
+  curIdx=nearestIdx(document.getElementById('datepick').value);const d=dates[curIdx];document.getElementById('datepick').value=d;
+  const dailyRet=D.nav[curIdx][2];
+  document.getElementById('curtip').innerHTML=`${curIdx+1}/${dates.length} · 日涨跌幅 <span class="${dailyRet>=0?'pos':'neg'}">${dailyRet>=0?'+':''}${pct(dailyRet,2)}</span>`;
   const rp=D.rp_daily[d];let h=`<div class="kv"><b>日期</b>${d} · <b>池供给</b>${pct(rp.S,2)} · <b>池需求</b>${pct(rp.D,2)} · <b>紧俏</b>${rp.tight?'是':'否'}</div>`;
   h+='<table><tr><th class="l">袖</th><th>RP权重</th><th>择时p</th><th>池借款</th></tr>';SLEEVES.forEach((s,i)=>h+=`<tr><td class="l">${SN[s]}</td><td>${pct(rp.w[i],2)}</td><td>${rp.p[i].toFixed(3)}</td><td>${pct(rp.borrow[i],2)}</td></tr>`);document.getElementById('signal').innerHTML=h+'</table>';
   document.getElementById('holdings').innerHTML=holdTable(D.positions[d]||[]);
