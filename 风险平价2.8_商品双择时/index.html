@@ -303,9 +303,8 @@ function renderDetail(){
   const dailyRet=D.nav[curIdx][2];
   document.getElementById('curtip').innerHTML=`${curIdx+1}/${dates.length} · 日涨跌幅 <span class="${dailyRet>=0?'pos':'neg'}">${dailyRet>=0?'+':''}${pct(dailyRet,2)}</span>`;
   const rp=D.rp_daily[d],positions=D.weights[curIdx];let h=`<div class="kv"><b>日期</b>${d} · <b>池供给</b>${pct(rp.S,2)} · <b>池需求</b>${pct(rp.D,2)} · <b>紧俏</b>${rp.tight?'是':'否'}</div>`;
-  h+='<div class="kv" style="margin-top:6px"><b>四袖仓位（含借款）</b></div>'+weightBar(positions);
-  h+='<div class="kv" style="margin-top:6px"><b>RP底座生效权重 w_eff</b></div>'+weightBar(['d',rp.w[0],rp.w[1],rp.w[2],rp.w[3],0]);
-  h+='<table><tr><th class="l">袖</th><th>RP权重 w_eff</th><th>择时p</th><th>池借款</th><th>仓位（含借款）</th></tr>';SLEEVES.forEach((s,i)=>h+=`<tr><td class="l">${SN[s]}</td><td>${pct(rp.w[i],2)}</td><td>${rp.p[i].toFixed(3)}</td><td>${pct(rp.borrow[i],2)}</td><td>${pct(positions[5+i],2)}</td></tr>`);document.getElementById('signal').innerHTML=h+'</table>';
+  h+='<div class="kv" style="margin-top:6px"><b>组合实际仓位</b>（四袖含借款，另含国债及现金）</div>'+weightBar([positions[0],...positions.slice(5)]);
+  h+='<table><tr><th class="l">袖</th><th>择时p</th><th>池借款</th><th>实际仓位（含借款）</th></tr>';SLEEVES.forEach((s,i)=>h+=`<tr><td class="l">${SN[s]}</td><td>${rp.p[i].toFixed(3)}</td><td>${pct(rp.borrow[i],2)}</td><td>${pct(positions[5+i],2)}</td></tr>`);document.getElementById('signal').innerHTML=h+'</table>';
   document.getElementById('holdings').innerHTML=holdTable(D.positions[d]||[]);
 }
 document.getElementById('prev').onclick=()=>{document.getElementById('datepick').value=dates[Math.max(0,curIdx-1)];renderDetail();};
